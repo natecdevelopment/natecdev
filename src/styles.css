@@ -262,7 +262,6 @@
 /* Two rings breathe outwards from the button, plus a soft halo that swells on the button itself.
    Each button sets --pulse-ring / --pulse-glow so the glow matches its own colour. */
 .float-pulse {
-  position: relative;
   animation: float-pulse-glow 2.8s ease-in-out infinite;
 }
 .float-pulse::before,
