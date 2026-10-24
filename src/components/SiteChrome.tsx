@@ -114,6 +114,34 @@ export function Header() {
   );
 }
 
+/** Floating contact buttons: WhatsApp bottom-right, call bottom-left (fixed on every public page). */
+export function FloatingContacts() {
+  const floating =
+    "fixed bottom-5 z-40 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-[0_10px_30px_-8px_rgba(4,26,56,0.45)] transition-transform duration-200 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 md:h-16 md:w-16";
+  return (
+    <>
+      {/* Call — left */}
+      <a
+        href={company.phoneLink}
+        aria-label={`Call ${company.phone}`}
+        className={`${floating} left-4 bg-navy hover:bg-navy-deep focus-visible:ring-navy md:left-6`}
+      >
+        <Phone className="h-6 w-6" />
+      </a>
+      {/* WhatsApp — right */}
+      <a
+        href={company.whatsappLink}
+        target="_blank"
+        rel="noreferrer"
+        aria-label="Chat on WhatsApp"
+        className={`${floating} right-4 bg-whatsapp hover:brightness-105 focus-visible:ring-whatsapp md:right-6`}
+      >
+        <WhatsAppIcon className="h-7 w-7" />
+      </a>
+    </>
+  );
+}
+
 export function Footer() {
   const social = "flex h-10 w-10 items-center justify-center rounded-full border border-navy/15 text-navy transition hover:border-brand-red hover:bg-brand-red hover:text-white";
   return (

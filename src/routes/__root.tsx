@@ -11,7 +11,8 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 
-import { Header, Footer } from "@/components/SiteChrome";
+import { Header, Footer, FloatingContacts } from "@/components/SiteChrome";
+
 import { Toaster } from "@/components/ui/sonner";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -137,6 +138,7 @@ function RootComponent() {
       <main className={home ? "" : "pt-16 md:pt-[72px]"}>
         <Outlet />
       </main>
+      <FloatingContacts />
       <Footer />
       <Toaster richColors position="top-center" />
     </QueryClientProvider>
