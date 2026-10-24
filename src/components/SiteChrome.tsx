@@ -144,27 +144,24 @@ export function Header() {
 
 /** Floating contact buttons: WhatsApp bottom-right, call bottom-left (fixed on every public page). */
 export function FloatingContacts() {
-  const floating =
-    "fixed bottom-5 z-40 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-[0_10px_30px_-8px_rgba(4,26,56,0.45)] transition-transform duration-200 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 md:h-16 md:w-16";
+  // Same look as muktadi.com: solid circle, soft colour ring + shadow, and a "ping" ripple that
+  // grows to 2× and fades every second. Hover shows a label and scales the button up.
+  const btn = "group fixed bottom-6 z-40 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg ring-4 transition hover:scale-110 focus-visible:outline-none focus-visible:ring-offset-2";
+  const tip = "pointer-events-none absolute whitespace-nowrap rounded-md bg-ink px-3 py-1.5 text-xs font-medium text-white opacity-0 transition group-hover:opacity-100";
+  const ping = "pointer-events-none absolute inset-0 rounded-full animate-ping motion-reduce:hidden";
   return (
     <>
       {/* Call — left */}
-      <a
-        href={company.phoneLink}
-        aria-label={`Call ${company.phone}`}
-        className={`${floating} float-pulse pulse-navy left-4 bg-navy hover:bg-navy-deep focus-visible:ring-navy md:left-6`}
-      >
+      <a href={company.phoneLink} aria-label={`Call ${company.phone}`} className={`${btn} left-6 bg-navy shadow-navy/30 ring-navy/10`}>
         <Phone className="h-6 w-6" />
+        <span className={`${tip} left-16`}>Call now</span>
+        <span className={`${ping} bg-navy/40`} aria-hidden />
       </a>
       {/* WhatsApp — right */}
-      <a
-        href={company.whatsappLink}
-        target="_blank"
-        rel="noreferrer"
-        aria-label="Chat on WhatsApp"
-        className={`${floating} float-pulse pulse-whatsapp right-4 bg-whatsapp hover:brightness-105 focus-visible:ring-whatsapp md:right-6`}
-      >
+      <a href={company.whatsappLink} target="_blank" rel="noreferrer" aria-label="Chat on WhatsApp" className={`${btn} right-6 bg-whatsapp shadow-whatsapp/30 ring-whatsapp/15`}>
         <WhatsAppIcon className="h-7 w-7" />
+        <span className={`${tip} right-16`}>Chat on WhatsApp</span>
+        <span className={`${ping} bg-whatsapp/40`} aria-hidden />
       </a>
     </>
   );
