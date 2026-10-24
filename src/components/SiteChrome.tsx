@@ -152,10 +152,10 @@ export function FloatingContacts() {
   return (
     <>
       {/* Call — left */}
-      <a href={company.phoneLink} aria-label={`Call ${company.phone}`} className={`${btn} left-6 bg-navy shadow-navy/30 ring-navy/10`}>
+      <a href={company.phoneLink} aria-label={`Call ${company.phone}`} className={`${btn} left-6 bg-whatsapp shadow-whatsapp/30 ring-whatsapp/15`}>
         <Phone className="h-6 w-6" />
         <span className={`${tip} left-16`}>Call now</span>
-        <span className={`${ping} bg-navy/40`} aria-hidden />
+        <span className={`${ping} bg-whatsapp/40`} aria-hidden />
       </a>
       {/* WhatsApp — right */}
       <a href={company.whatsappLink} target="_blank" rel="noreferrer" aria-label="Chat on WhatsApp" className={`${btn} right-6 bg-whatsapp shadow-whatsapp/30 ring-whatsapp/15`}>
