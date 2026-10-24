@@ -268,22 +268,22 @@
 .float-pulse::after {
   content: "";
   position: absolute;
-  inset: -10px;
+  inset: -8px;
   z-index: -1;
   border-radius: 9999px;
   pointer-events: none;
-  background: radial-gradient(circle, var(--pulse-glow) 0%, var(--pulse-glow) 40%, transparent 72%);
+  background: radial-gradient(circle, var(--pulse-glow) 0%, transparent 68%);
   animation: float-pulse-ring 2.8s ease-out infinite;
 }
 .float-pulse::after { animation-delay: 1.4s; }
 @keyframes float-pulse-ring {
-  0%   { transform: scale(.85); opacity: .85; }
-  70%  { opacity: .22; }
-  100% { transform: scale(1.5); opacity: 0; }
+  0%   { transform: scale(.9); opacity: .7; }
+  70%  { opacity: .18; }
+  100% { transform: scale(1.4); opacity: 0; }
 }
 @keyframes float-pulse-glow {
   0%, 100% { box-shadow: 0 10px 30px -8px rgba(4, 26, 56, .45), 0 0 0 0 var(--pulse-glow); }
-  50%      { box-shadow: 0 10px 30px -8px rgba(4, 26, 56, .45), 0 0 22px 5px var(--pulse-glow); }
+  50%      { box-shadow: 0 10px 30px -8px rgba(4, 26, 56, .45), 0 0 20px 5px var(--pulse-glow); }
 }
-.pulse-navy { --pulse-glow: color-mix(in oklab, var(--navy) 45%, var(--white)); }
-.pulse-whatsapp { --pulse-glow: color-mix(in oklab, var(--whatsapp) 60%, transparent); }
+.pulse-navy { --pulse-glow: color-mix(in oklab, var(--navy) 25%, var(--white)); }
+.pulse-whatsapp { --pulse-glow: color-mix(in oklab, var(--whatsapp) 55%, transparent); }
