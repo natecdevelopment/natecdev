@@ -162,7 +162,11 @@ function LocationPage() {
               <li className="flex gap-3"><Mail className="mt-1 h-5 w-5 shrink-0 text-brand-red" /><a href={`mailto:${company.email}`} className="break-all hover:underline">{company.email}</a></li>
               <li className="flex gap-3"><Clock className="mt-1 h-5 w-5 shrink-0 text-brand-red" /><span>Please call or WhatsApp before you visit so the right person can meet you.</span></li>
             </ul>
-            <a href={DIRECTIONS} target="_blank" rel="noreferrer" className="btn btn-primary mt-7"><Navigation className="h-4 w-4" /> Get directions</a>
+            <div className="mt-7 flex flex-wrap items-center gap-5">
+              <a href={DIRECTIONS} target="_blank" rel="noreferrer" className="btn btn-primary"><Navigation className="h-4 w-4" /> Get directions</a>
+              <a href={office.mapsUrl} target="_blank" rel="noreferrer" className="text-sm font-semibold text-brand-red underline underline-offset-4 hover:text-navy">View on Google Maps</a>
+            </div>
+
           </Reveal>
         </div>
       </section>

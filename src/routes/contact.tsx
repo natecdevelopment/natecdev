@@ -123,7 +123,11 @@ function ContactPage() {
                 <p className="flex gap-2"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-brand-red" />{company.address}</p>
                 <p className="mt-2 flex gap-2"><Clock className="mt-0.5 h-4 w-4 shrink-0 text-brand-red" />Call or WhatsApp before you visit so we can meet you.</p>
               </div>
-              <a href={DIRECTIONS} target="_blank" rel="noreferrer" className="btn btn-primary"><Navigation className="h-4 w-4" /> Get directions</a>
+              <div className="flex flex-wrap items-center gap-5">
+                <a href={DIRECTIONS} target="_blank" rel="noreferrer" className="btn btn-primary"><Navigation className="h-4 w-4" /> Get directions</a>
+                <a href={office.mapsUrl} target="_blank" rel="noreferrer" className="text-sm font-semibold text-brand-red underline underline-offset-4 hover:text-navy">View on Google Maps</a>
+              </div>
+
             </div>
           </Reveal>
         </div>
