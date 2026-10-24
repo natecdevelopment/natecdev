@@ -209,7 +209,7 @@ export function WhyNatec() {
         </Reveal>
         <div className="grid gap-5 md:grid-cols-3">
           <Reveal className="relative min-h-[420px] overflow-hidden rounded-2xl md:row-span-2">
-            <img src={frameSrc("d", 53)} alt="Open rooftop space on a Natec residential building in Rajendrapur, Sreepur, Gazipur" loading="lazy" width={1920} height={1080} className="absolute inset-0 h-full w-full object-cover" />
+            <img src={frameSrc("d", 32)} alt="Open rooftop space on a Natec residential building in Rajendrapur, Sreepur, Gazipur" loading="lazy" width={1920} height={1080} className="absolute inset-0 h-full w-full object-cover" />
             <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(4,26,56,0.85), transparent 60%)" }} />
             <div className="absolute inset-x-0 bottom-0 p-7 text-white">
               <span className="mb-4 block h-2 w-2 rounded-full bg-brand-red" />
@@ -338,7 +338,7 @@ export function Board() {
 export function ContactCTA() {
   return (
     <section className="relative overflow-hidden text-white">
-      <img src={frameSrc("d", 197)} alt="" aria-hidden loading="lazy" width={1920} height={1080} className="absolute inset-0 h-full w-full object-cover" />
+      <img src={frameSrc("d", 118)} alt="" aria-hidden loading="lazy" width={1920} height={1080} className="absolute inset-0 h-full w-full object-cover" />
       <div className="absolute inset-0 bg-navy-deep/65" />
       <div className="section-pad relative">
         <div className="container-x grid items-center gap-12 md:grid-cols-[1fr_1.15fr]">

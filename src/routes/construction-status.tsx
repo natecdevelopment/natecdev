@@ -23,9 +23,9 @@ export const Route = createFileRoute("/construction-status")({
       { property: "og:description", content: DESC },
       { property: "og:type", content: "website" },
       { property: "og:url", content: `${SITE}/construction-status` },
-      { property: "og:image", content: `${SITE}/hero-natec/d/0040.webp` },
+      { property: "og:image", content: `${SITE}/hero-natec/d/0024.webp` },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:image", content: `${SITE}/hero-natec/d/0040.webp` },
+      { name: "twitter:image", content: `${SITE}/hero-natec/d/0024.webp` },
     ],
     links: [{ rel: "canonical", href: `${SITE}/construction-status` }],
     scripts: [{
@@ -60,7 +60,7 @@ function StatusIndex() {
   return (
     <>
       <PageHero
-        image="/hero-natec/d/0040.webp"
+        image="/hero-natec/d/0024.webp"
         imageAlt="Natec Development construction site in Rajendrapur, Sreepur, Gazipur"
         imagePosition="center 55%"
         crumbs={[{ label: "Home", to: "/" }, { label: "Construction Status" }]}

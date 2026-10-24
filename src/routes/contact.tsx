@@ -26,8 +26,8 @@ export const Route = createFileRoute("/contact")({
       { property: "og:type", content: "website" },
       { property: "og:url", content: `${SITE}/contact` },
       { name: "twitter:card", content: "summary_large_image" },
-      { property: "og:image", content: `${SITE}/hero-natec/d/0197.webp` },
-      { name: "twitter:image", content: `${SITE}/hero-natec/d/0197.webp` },
+      { property: "og:image", content: `${SITE}/hero-natec/d/0118.webp` },
+      { name: "twitter:image", content: `${SITE}/hero-natec/d/0118.webp` },
     ],
     links: [{ rel: "canonical", href: `${SITE}/contact` }],
     scripts: [
@@ -83,7 +83,7 @@ function ContactPage() {
   return (
     <>
       <PageHero
-        image="/hero-natec/d/0197.webp"
+        image="/hero-natec/d/0118.webp"
         imageAlt="Natec residential building at dusk in Rajendrapur, Sreepur, Gazipur"
         imagePosition="center 50%"
         heightClass="min-h-[64svh] md:min-h-[56svh]"

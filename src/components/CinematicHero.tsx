@@ -3,8 +3,13 @@ import { Link } from "@tanstack/react-router";
 import { company } from "@/lib/site";
 import { WhatsAppIcon } from "@/components/SiteChrome";
 
-const FRAMES = 200;
+/** Number of image files in /hero-natec/{d,m}/ (0001.webp … 0120.webp). */
+const FRAMES = 120;
+/** Chapter, brightness and cloud timings below are written on a 1–200 "story" scale, independent of FRAMES. */
+const STORY = 200;
 export const frameSrc = (dir: "d" | "m", i: number) => `/hero-natec/${dir}/${String(i).padStart(4, "0")}.webp`;
+/** File number for a frame given on the 1–200 story scale. */
+const storyToFile = (n: number) => Math.round(((n - 1) * (FRAMES - 1)) / (STORY - 1)) + 1;
 
 type Chapter = { range: [number, number]; eyebrow?: string; title: React.ReactNode; body?: string; cta?: "intro" | "end"; still?: number };
 const CHAPTERS: Chapter[] = [
@@ -55,10 +60,13 @@ export function CinematicHero() {
 }
 
 // Auto-play: on load the film plays itself to the last frame unless the visitor takes over.
-const AUTOPLAY_SECONDS = { d: 16, m: 14 }; // time for the whole hero at full speed
+const AUTOPLAY_SECONDS = { d: 24, m: 22 }; // time for the whole hero at full speed
 const AUTOPLAY_DELAY_MS = 1200; // let the drifting clouds breathe first
 const RAMP_SECONDS = 1.4; // ease in at the start
-const CLOUD_FADE_FRAMES = 14; // drifting clouds fade out over the first frames
+const CLOUD_FADE_FRAMES = 14; // drifting clouds fade out over the first story frames
+// The picture follows the scroll position through a soft spring (higher = snappier), and
+// neighbouring frames are cross-faded, so it glides instead of stepping from image to image.
+const FOLLOW_RATE = 9;
 
 function FlyHero() {
   const sectionRef = useRef<HTMLElement>(null);
@@ -82,7 +90,7 @@ function FlyHero() {
     const SRC = dir === "m" ? { w: 1080, h: 1920 } : { w: 1920, h: 1080 };
     const KEEP_BEHIND = 8, KEEP_AHEAD = 24, MAX_DECODES = 3;
     let alive = true, raf = 0, lastDrawn = -1, lastChapter = 0, lastBright = false, dirty = true;
-    let lastCloud = -1, lastFrame = 1;
+    let lastCloud = -1, playhead = 0, drawnAt = -1, lastTick = 0;
     let lenis: {
       raf: (t: number) => void;
       destroy: () => void;
@@ -164,10 +172,12 @@ function FlyHero() {
       }
       return -1;
     };
-    const paint = (b: ImageBitmap) => {
+    const paint = (b: ImageBitmap, alpha = 1) => {
       const { w, h } = coverSize();
       // Pre-scaled frames are copied 1:1; unscaled ones (old browsers) are scaled here.
+      ctx.globalAlpha = alpha;
       ctx.drawImage(b, Math.round((canvas.width - w) / 2), Math.round((canvas.height - h) / 2), w, h);
+      ctx.globalAlpha = 1;
     };
     const decode = async (i: number) => {
       const blob = blobs[i];
@@ -204,7 +214,7 @@ function FlyHero() {
       }
     };
 
-    // Download in playing order (1 → 200) so auto-play can follow right behind. Max 6 in flight.
+    // Download in playing order (1 → last) so auto-play can follow right behind. Max 6 in flight.
     let next = 1;
     const fetchOne = async (i: number) => {
       for (let attempt = 0; attempt < 2; attempt++) {
@@ -233,7 +243,7 @@ function FlyHero() {
         const total = el.offsetHeight - window.innerHeight;
 
         // ---- auto-play ----
-        if (auto === "idle" && lenis && t - startedAt > AUTOPLAY_DELAY_MS && loadedUpTo() >= 12) {
+        if (auto === "idle" && lenis && t - startedAt > AUTOPLAY_DELAY_MS && loadedUpTo() >= 8) {
           if (lenis.scroll > 10) stopAuto();
           else { auto = "playing"; autoY = lenis.scroll; autoStart = lastT = t; setAutoplaying(true); }
         }
@@ -267,24 +277,41 @@ function FlyHero() {
 
         const y = lenis ? lenis.scroll : window.scrollY;
         const p = Math.max(0, Math.min(1, (y - el.offsetTop) / (total || 1)));
-        const idx = Math.round(p * (FRAMES - 1));
-        const frame = idx + 1;
-        if (frame !== lastFrame) { lastDir = frame > lastFrame ? 1 : -1; lastFrame = frame; }
+        // Ease the playhead (a fractional frame position) towards the scroll position.
+        const target = p * (FRAMES - 1);
+        const fdt = lastTick ? Math.min(0.1, (t - lastTick) / 1000) : 0;
+        lastTick = t;
+        if (target !== playhead) lastDir = target > playhead ? 1 : -1;
+        playhead += (target - playhead) * (1 - Math.exp(-fdt * FOLLOW_RATE));
+        if (Math.abs(target - playhead) < 0.002) playhead = target;
+        const base = Math.floor(playhead);
+        const frac = playhead - base;
+        const frame = base + 1; // 1-based file number under the playhead
         schedule(frame);
-        if (frame !== lastDrawn || dirty) {
-          const f = bitmaps.has(frame) ? frame : nearest(frame);
-          if (f > 0 && (f !== lastDrawn || dirty)) { paint(bitmaps.get(f)!); lastDrawn = f; dirty = false; }
+        if (Math.abs(playhead - drawnAt) > 0.001 || dirty) {
+          const a = bitmaps.get(frame), b = bitmaps.get(frame + 1);
+          if (a) {
+            paint(a);
+            if (b && frac > 0.01) paint(b, frac); // cross-fade into the next frame
+            drawnAt = playhead; dirty = false;
+          } else {
+            const f = nearest(Math.round(playhead) + 1);
+            if (f > 0) { paint(bitmaps.get(f)!); dirty = false; }
+          }
         }
-        if (progressRef.current) progressRef.current.style.transform = `scaleX(${p})`;
-        const ch = CHAPTERS.findIndex((c) => inRange(frame, c.range));
+        // Position on the 1–200 story scale for chapters, brightness and clouds.
+        const pos = playhead / (FRAMES - 1);
+        const storyFrame = Math.round(pos * (STORY - 1)) + 1;
+        if (progressRef.current) progressRef.current.style.transform = `scaleX(${pos})`;
+        const ch = CHAPTERS.findIndex((c) => inRange(storyFrame, c.range));
         if (ch !== lastChapter) { lastChapter = ch; setChapter(ch); }
-        const bright = BRIGHT.some((r) => inRange(frame, r));
+        const bright = BRIGHT.some((r) => inRange(storyFrame, r));
         if (bright !== lastBright) {
           lastBright = bright;
           if (brightRef.current) brightRef.current.style.opacity = bright ? "0.2" : "0";
         }
-        if (hintRef.current) hintRef.current.style.opacity = frame <= 20 || auto === "playing" ? "1" : "0";
-        const cloud = Math.round(Math.max(0, 1 - (frame - 1) / CLOUD_FADE_FRAMES) * 100) / 100;
+        if (hintRef.current) hintRef.current.style.opacity = storyFrame <= 20 || auto === "playing" ? "1" : "0";
+        const cloud = Math.round(Math.max(0, 1 - (storyFrame - 1) / CLOUD_FADE_FRAMES) * 100) / 100;
         if (cloud !== lastCloud && cloudsRef.current) {
           lastCloud = cloud;
           cloudsRef.current.style.opacity = String(cloud);
@@ -304,7 +331,7 @@ function FlyHero() {
   }, []);
 
   return (
-    <section id="hero" ref={sectionRef} className="relative h-[400vh] bg-navy-deep md:h-[450vh]">
+    <section id="hero" ref={sectionRef} className="relative h-[440vh] bg-navy-deep md:h-[480vh]">
       <div className="sticky top-0 h-[100svh] w-full overflow-hidden text-white">
         <canvas ref={canvasRef} aria-hidden className="absolute inset-0 block h-full w-full" style={{ contain: "strict" }} />
 
@@ -370,7 +397,7 @@ function StaticHero() {
       <div className="container-x space-y-16 py-16">
         {CHAPTERS.slice(1).map((c, i) => (
           <div key={i} className="grid items-center gap-6 md:grid-cols-2">
-            {c.still && <img src={frameSrc("d", c.still)} alt="" loading="lazy" width={1920} height={1080} className="aspect-video w-full rounded-2xl object-cover" />}
+            {c.still && <img src={frameSrc("d", storyToFile(c.still))} alt="" loading="lazy" width={1920} height={1080} className="aspect-video w-full rounded-2xl object-cover" />}
             <div><ChapterBody c={c} /></div>
           </div>
         ))}

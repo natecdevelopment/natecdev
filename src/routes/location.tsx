@@ -27,8 +27,8 @@ export const Route = createFileRoute("/location")({
       { property: "og:type", content: "website" },
       { property: "og:url", content: `${SITE}/location` },
       { name: "twitter:card", content: "summary_large_image" },
-      { property: "og:image", content: `${SITE}/hero-natec/d/0030.webp` },
-      { name: "twitter:image", content: `${SITE}/hero-natec/d/0030.webp` },
+      { property: "og:image", content: `${SITE}/hero-natec/d/0018.webp` },
+      { name: "twitter:image", content: `${SITE}/hero-natec/d/0018.webp` },
     ],
     links: [{ rel: "canonical", href: `${SITE}/location` }],
     scripts: [
@@ -106,7 +106,7 @@ function LocationPage() {
   return (
     <>
       <PageHero
-        image="/hero-natec/d/0030.webp"
+        image="/hero-natec/d/0018.webp"
         imageAlt="Morning drone view over green Rajendrapur, Sreepur, Gazipur"
         imagePosition="center 55%"
         crumbs={[{ label: "Home", to: "/" }, { label: "Location" }]}

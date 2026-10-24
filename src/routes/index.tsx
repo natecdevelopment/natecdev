@@ -8,7 +8,7 @@ import { company } from "@/lib/site";
 const SITE = SITE_URL;
 const TITLE = "Natec Development Ltd. | Apartments & Flats in Rajendrapur, Sreepur, Gazipur";
 const DESC = "Real estate developer in Rajendrapur, Sreepur, Gazipur. 75 homes built and sold. Register for upcoming apartment projects in Gazipur.";
-const OG_IMAGE = `${SITE}/hero-natec/d/0070.webp`;
+const OG_IMAGE = `${SITE}/hero-natec/d/0042.webp`;
 
 const jsonLd = [
   {

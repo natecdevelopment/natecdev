@@ -27,8 +27,8 @@ export const Route = createFileRoute("/floor-plan")({
       { property: "og:type", content: "website" },
       { property: "og:url", content: `${SITE}/floor-plan` },
       { name: "twitter:card", content: "summary_large_image" },
-      { property: "og:image", content: `${SITE}/hero-natec/d/0100.webp` },
-      { name: "twitter:image", content: `${SITE}/hero-natec/d/0100.webp` },
+      { property: "og:image", content: `${SITE}/hero-natec/d/0060.webp` },
+      { name: "twitter:image", content: `${SITE}/hero-natec/d/0060.webp` },
     ],
     links: [{ rel: "canonical", href: `${SITE}/floor-plan` }],
     scripts: [{
@@ -164,7 +164,7 @@ function FloorPlanPage() {
   return (
     <>
       <PageHero
-        image="/hero-natec/d/0100.webp"
+        image="/hero-natec/d/0060.webp"
         imageAlt="Living room of a sample Natec apartment"
         imagePosition="center 45%"
         crumbs={[{ label: "Home", to: "/" }, { label: "Floor Plan" }]}

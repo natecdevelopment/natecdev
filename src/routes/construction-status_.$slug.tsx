@@ -120,7 +120,7 @@ function StatusPage() {
   return (
     <div className="pb-20 lg:pb-0">
       <PageHero
-        image={p.cover?.public_url ?? "/hero-natec/d/0040.webp"}
+        image={p.cover?.public_url ?? "/hero-natec/d/0024.webp"}
         imageAlt={p.cover?.alt_text || `${p.name} construction by Natec Development`}
         crumbs={[{ label: "Home", to: "/" }, { label: "Construction Status", to: "/construction-status" }, { label: p.name }]}
         eyebrow={p.project_no || "Project"}
