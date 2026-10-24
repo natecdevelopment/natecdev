@@ -259,8 +259,8 @@
 .video-list::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--navy) 30%, transparent); border-radius: 999px; }
 
 /* ---------- Floating contact buttons: pulse glow ---------- */
-/* Two rings breathe outwards from the button, plus a soft halo that swells on the button itself.
-   Each button sets --pulse-ring / --pulse-glow so the glow matches its own colour. */
+/* Two soft halos breathe outwards from the button, plus a glow that swells on the button itself.
+   Each button sets --pulse-glow so the halo matches its own colour. */
 .float-pulse {
   animation: float-pulse-glow 2.8s ease-in-out infinite;
 }
@@ -268,27 +268,22 @@
 .float-pulse::after {
   content: "";
   position: absolute;
-  inset: 0;
+  inset: -10px;
   z-index: -1;
   border-radius: 9999px;
   pointer-events: none;
-  animation: float-pulse-ring 2.8s cubic-bezier(.16, .84, .36, 1) infinite;
+  background: radial-gradient(circle, var(--pulse-glow) 0%, var(--pulse-glow) 40%, transparent 72%);
+  animation: float-pulse-ring 2.8s ease-out infinite;
 }
 .float-pulse::after { animation-delay: 1.4s; }
 @keyframes float-pulse-ring {
-  0%   { transform: scale(1); opacity: .8; box-shadow: 0 0 0 1px var(--pulse-ring), 0 0 22px 6px var(--pulse-glow); }
-  70%  { opacity: .15; }
-  100% { transform: scale(1.9); opacity: 0; box-shadow: 0 0 0 1px transparent, 0 0 34px 14px transparent; }
+  0%   { transform: scale(.85); opacity: .85; }
+  70%  { opacity: .22; }
+  100% { transform: scale(1.5); opacity: 0; }
 }
 @keyframes float-pulse-glow {
   0%, 100% { box-shadow: 0 10px 30px -8px rgba(4, 26, 56, .45), 0 0 0 0 var(--pulse-glow); }
-  50%      { box-shadow: 0 10px 30px -8px rgba(4, 26, 56, .45), 0 0 24px 6px var(--pulse-glow); }
+  50%      { box-shadow: 0 10px 30px -8px rgba(4, 26, 56, .45), 0 0 22px 5px var(--pulse-glow); }
 }
-.pulse-navy {
-  --pulse-ring: color-mix(in oklab, var(--navy) 62%, transparent);
-  --pulse-glow: color-mix(in oklab, var(--navy) 55%, transparent);
-}
-.pulse-whatsapp {
-  --pulse-ring: color-mix(in oklab, var(--whatsapp) 68%, transparent);
-  --pulse-glow: color-mix(in oklab, var(--whatsapp) 55%, transparent);
-}
+.pulse-navy { --pulse-glow: color-mix(in oklab, var(--navy) 45%, var(--white)); }
+.pulse-whatsapp { --pulse-glow: color-mix(in oklab, var(--whatsapp) 60%, transparent); }
