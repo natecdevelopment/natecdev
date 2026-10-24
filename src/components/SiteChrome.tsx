@@ -124,7 +124,7 @@ export function FloatingContacts() {
       <a
         href={company.phoneLink}
         aria-label={`Call ${company.phone}`}
-        className={`${floating} left-4 bg-navy hover:bg-navy-deep focus-visible:ring-navy md:left-6`}
+        className={`${floating} float-pulse pulse-navy left-4 bg-navy hover:bg-navy-deep focus-visible:ring-navy md:left-6`}
       >
         <Phone className="h-6 w-6" />
       </a>
@@ -134,7 +134,7 @@ export function FloatingContacts() {
         target="_blank"
         rel="noreferrer"
         aria-label="Chat on WhatsApp"
-        className={`${floating} right-4 bg-whatsapp hover:brightness-105 focus-visible:ring-whatsapp md:right-6`}
+        className={`${floating} float-pulse pulse-whatsapp right-4 bg-whatsapp hover:brightness-105 focus-visible:ring-whatsapp md:right-6`}
       >
         <WhatsAppIcon className="h-7 w-7" />
       </a>
