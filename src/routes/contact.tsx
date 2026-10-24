@@ -5,8 +5,8 @@ import { MapPin, Phone, Mail, Clock, Navigation, PhoneCall, CalendarCheck, FileT
 import { PageHero, Reveal, WhatsAppIcon } from "@/components/SiteChrome";
 import { InquiryForm } from "@/components/InquiryForm";
 import { FAQS } from "@/components/HomeSections";
-import { mapEmbed } from "@/components/ProjectsGrid";
-import { company } from "@/lib/site";
+import { company, office, officeDirections as DIRECTIONS, officeEmbed } from "@/lib/site";
+
 
 const SITE = SITE_URL;
 const TITLE = "Contact Natec Development Ltd. | Rajendrapur, Sreepur, Gazipur";
