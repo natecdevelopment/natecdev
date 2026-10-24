@@ -42,7 +42,6 @@ export const Route = createFileRoute("/location")({
           telephone: "+8801354252400",
           email: company.email,
           address: { "@type": "PostalAddress", streetAddress: "1st Floor, Vai Vai Market, opposite Walton showroom, Dhaka–Kapasia Road, Rajendrapur Bazar", addressLocality: "Sreepur", addressRegion: "Gazipur", postalCode: "1741", addressCountry: "BD" },
-          // TODO [placeholder]: add real office coordinates, e.g. geo: { "@type": "GeoCoordinates", latitude, longitude }
         }),
       },
       {
@@ -62,23 +61,35 @@ export const Route = createFileRoute("/location")({
   notFoundComponent: () => <p className="p-10 pt-32 text-center">Not found.</p>,
 });
 
-/** Editable travel notes and distances — replace each [placeholder] with confirmed details. */
+/** Directions and nearby places. Distances are approximate road figures (Dhaka–Rajendrapur ≈ 36 km on the N3). */
 const ROUTES = [
-  { from: "From Dhaka", via: "Via the Dhaka–Mymensingh Highway", note: "[travel time and route notes]" },
-  { from: "From Gazipur Chowrasta", via: "Towards Rajendrapur", note: "[travel time and route notes]" },
-  { from: "From Joydebpur", via: "Towards Rajendrapur Bazar", note: "[travel time and route notes]" },
+  {
+    from: "From Dhaka",
+    via: "Via the Dhaka–Mymensingh Highway",
+    note: "Head north through Tongi and Gazipur Chowrasta to Rajendrapur Chowrasta, about 36 km from Dhaka, then follow the Kapasia road to Rajendrapur Bazar. Allow 1½–2½ hours depending on traffic.",
+  },
+  {
+    from: "From Gazipur Chowrasta",
+    via: "Towards Rajendrapur",
+    note: "Stay on the highway north to Rajendrapur Chowrasta and turn towards Kapasia for the bazar. Buses heading to Sreepur, Mawna and Mymensingh pass Rajendrapur Chowrasta.",
+  },
+  {
+    from: "By train",
+    via: "Rajendrapur railway station",
+    note: "Trains on the Dhaka–Mymensingh line stop at Rajendrapur station, north of Joydebpur. From the station, a CNG or rickshaw brings you to Rajendrapur Bazar.",
+  },
 ];
 const NEARBY = [
-  { icon: Store, name: "Rajendrapur Bazar", distance: "[distance]" },
-  { icon: RouteIcon, name: "Dhaka–Mymensingh Highway", distance: "[distance]" },
-  { icon: School, name: "Schools", distance: "[distance]" },
-  { icon: GraduationCap, name: "Colleges", distance: "[distance]" },
-  { icon: Hospital, name: "Hospital / clinic", distance: "[distance]" },
-  { icon: Landmark, name: "Mosque", distance: "[distance]" },
-  { icon: ShoppingBag, name: "Markets", distance: "[distance]" },
-  { icon: PawPrint, name: "Bangabandhu Sheikh Mujib Safari Park", distance: "[distance]" },
-  { icon: Trees, name: "Bhawal National Park", distance: "[distance]" },
-  { icon: Shield, name: "Rajendrapur Cantonment", distance: "[distance]" },
+  { icon: Store, name: "Rajendrapur Bazar", note: "Our office, plus daily shops and bank branches" },
+  { icon: RouteIcon, name: "Dhaka–Mymensingh Highway", note: "Joined at Rajendrapur Chowrasta" },
+  { icon: School, name: "Schools", note: "Local primary and secondary schools around the bazar" },
+  { icon: GraduationCap, name: "Colleges", note: "Including Rajendrapur Cantonment Public School & College" },
+  { icon: Hospital, name: "Hospital / clinic", note: "Local clinics nearby; larger hospitals in Gazipur city" },
+  { icon: Landmark, name: "Mosques", note: "Mosques throughout the neighbourhood" },
+  { icon: ShoppingBag, name: "Markets", note: "Fresh produce and groceries at Rajendrapur Bazar" },
+  { icon: PawPrint, name: "Gazipur Safari Park", note: "Wildlife park off the highway, north of Rajendrapur" },
+  { icon: Trees, name: "Bhawal National Park", note: "Sal forest park on the highway at Rajendrapur" },
+  { icon: Shield, name: "Rajendrapur Cantonment", note: "Home to CMH Rajendrapur and the cantonment school" },
 ];
 const WHY = [
   { icon: Leaf, title: "Green surroundings", body: "Rajendrapur and Sreepur sit among the forests of the Bhawal area, with trees and open land around them." },
@@ -148,7 +159,7 @@ function LocationPage() {
               <li className="flex gap-3"><Phone className="mt-1 h-5 w-5 shrink-0 text-brand-red" /><a href={company.phoneLink} className="hover:underline">{company.phone}</a></li>
               <li className="flex gap-3"><span className="mt-1 shrink-0 text-brand-red"><WhatsAppIcon /></span><a href={company.whatsappLink} target="_blank" rel="noreferrer" className="hover:underline">{company.whatsapp}</a></li>
               <li className="flex gap-3"><Mail className="mt-1 h-5 w-5 shrink-0 text-brand-red" /><a href={`mailto:${company.email}`} className="break-all hover:underline">{company.email}</a></li>
-              <li className="flex gap-3"><Clock className="mt-1 h-5 w-5 shrink-0 text-brand-red" /><span>Office hours: [office hours]</span></li>
+              <li className="flex gap-3"><Clock className="mt-1 h-5 w-5 shrink-0 text-brand-red" /><span>Please call or WhatsApp before you visit so the right person can meet you.</span></li>
             </ul>
             <a href={DIRECTIONS} target="_blank" rel="noreferrer" className="btn btn-primary mt-7"><Navigation className="h-4 w-4" /> Get directions</a>
           </Reveal>
@@ -181,7 +192,7 @@ function LocationPage() {
               <Reveal key={n.name} delay={(i % 5) * 70} className="rounded-2xl border border-border bg-ivory p-5">
                 <n.icon className="h-6 w-6 text-brand-red" aria-hidden />
                 <p className="mt-3 font-semibold text-navy">{n.name}</p>
-                <p className="mt-1 text-sm text-muted-foreground">{n.distance}</p>
+                <p className="mt-1 text-sm leading-snug text-muted-foreground">{n.note}</p>
               </Reveal>
             ))}
           </div>

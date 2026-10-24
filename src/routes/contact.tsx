@@ -120,7 +120,7 @@ function ContactPage() {
             <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-white p-5">
               <div className="text-sm text-navy">
                 <p className="flex gap-2"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-brand-red" />{company.address}</p>
-                <p className="mt-2 flex gap-2"><Clock className="mt-0.5 h-4 w-4 shrink-0 text-brand-red" />Office hours: [office hours]</p>
+                <p className="mt-2 flex gap-2"><Clock className="mt-0.5 h-4 w-4 shrink-0 text-brand-red" />Call or WhatsApp before you visit so we can meet you.</p>
               </div>
               <a href={DIRECTIONS} target="_blank" rel="noreferrer" className="btn btn-primary"><Navigation className="h-4 w-4" /> Get directions</a>
             </div>

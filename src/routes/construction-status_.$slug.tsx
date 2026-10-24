@@ -134,7 +134,7 @@ function StatusPage() {
         <dl className="container-x grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
           {[
             { icon: MapPin, k: "Location", v: p.location_short || p.address || "—" },
-            { icon: CalendarCheck, k: "Expected completion", v: p.expected_completion || "[Expected completion]" },
+            { icon: CalendarCheck, k: "Expected completion", v: p.expected_completion || "To be announced" },
             { icon: Clock, k: "Last updated", v: monthYear(p.status_updated_at) || "—" },
             { icon: Gauge, k: "Overall progress", v: `${p.progress_pct}%` },
           ].map((f) => (

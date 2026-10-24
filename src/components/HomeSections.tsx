@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ProjectFacts } from "@/components/ProjectFacts";
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, MapPin, Building2, ArrowUpDown, Trees, Car, HardHat, Play, MessageCircle, LayoutGrid, FileText, Phone, Mail, BedDouble, Bath, Sofa, UtensilsCrossed, CookingPot, Fence, Ruler, Facebook } from "lucide-react";
+import { ArrowRight, MapPin, Building2, Trees, Wallet, ClipboardList, HardHat, Play, MessageCircle, LayoutGrid, FileText, Phone, Mail, BedDouble, Bath, Sofa, UtensilsCrossed, CookingPot, Fence, Ruler, Facebook } from "lucide-react";
 import { company, directors } from "@/lib/site";
 import { PersonFemaleIcon, PersonMaleIcon } from "@/components/PersonIcons";
 import { Reveal, WhatsAppIcon } from "@/components/SiteChrome";
@@ -185,9 +185,9 @@ export function FloorPlan() {
 const WHY = [
   { i: MapPin, t: "Prime Rajendrapur location", b: "Our buildings sit close to Rajendrapur Bazar, Sreepur, Gazipur." },
   { i: Building2, t: "Planned RCC buildings", b: "Each residential building is planned as a reinforced-concrete structure." },
-  { i: ArrowUpDown, t: "Lift and generator backup", b: "[confirm: which projects have a lift and generator backup]" },
+  { i: Wallet, t: "Clear instalment plans", b: "Pay in instalments and see every payment and due date in your client account." },
   { i: Trees, t: "Rooftop spaces", b: "Open rooftops for fresh air and family time." },
-  { i: Car, t: "Car parking", b: "[confirm: parking details, e.g. ground-floor spaces per building]" },
+  { i: ClipboardList, t: "Progress you can follow", b: "Each building's progress is posted on our Construction Status page." },
   { i: HardHat, t: "On-site supervision", b: "Our team oversees the work on site, floor by floor." },
 ];
 
@@ -275,11 +275,11 @@ export function HowWeBuild() {
 
 /* ---------- 6. Location ---------- */
 const NEARBY = [
-  { t: "Rajendrapur Bazar", d: "[x min]" },
-  { t: "Dhaka–Mymensingh Highway", d: "[x min]" },
-  { t: "Schools & colleges", d: "[x min]" },
-  { t: "Hospital", d: "[x min]" },
-  { t: "Market & shopping", d: "[x min]" },
+  { t: "Rajendrapur Bazar", d: "Our projects & office" },
+  { t: "Dhaka–Mymensingh Highway", d: "At Rajendrapur Chowrasta" },
+  { t: "Dhaka city", d: "≈ 36 km by road" },
+  { t: "Schools & colleges", d: "In the area" },
+  { t: "Bhawal National Park", d: "Short drive" },
 ];
 
 export function Location() {
@@ -295,7 +295,7 @@ export function Location() {
               <li key={n.t} className="flex items-center justify-between py-3.5"><span className="flex items-center gap-3"><MapPin className="h-4 w-4 text-brand-red" strokeWidth={1.6} />{n.t}</span><span className="num text-navy">{n.d}</span></li>
             ))}
           </ul>
-          <p className="mt-3 text-xs text-muted-foreground">Approximate travel times by road.</p>
+          <p className="mt-3 text-xs text-muted-foreground">Distances are approximate. <Link to="/location" className="underline decoration-brand-red underline-offset-2 hover:text-navy">Directions and more nearby places</Link></p>
         </Reveal>
         <Reveal className="overflow-hidden rounded-2xl shadow-xl">
           <iframe title="Natec Development office location" src="https://www.google.com/maps?q=Rajendrapur+Bazar,+Sreepur,+Gazipur,+Bangladesh&output=embed" className="block h-[380px] w-full border-0 md:h-full md:min-h-[480px]" loading="lazy" />
@@ -564,8 +564,8 @@ export const FAQS = [
   { q: "Where are Natec's projects located?", a: "Our projects are in Rajendrapur Bazar, Sreepur, Gazipur: Shobuj Angon and Shobuj Aloy at Padma Gate, and Shobuj Digonto at Pepsi Gate. Our two upcoming projects are in Rajendrapur Bazar and Gazipur." },
   { q: "Are there flats available now?", a: "There are no ready flats left right now — all 75 flats in our three current projects are sold out. Register your interest for our upcoming projects in Gazipur and we will contact you first." },
   { q: "How do I book a site visit?", a: `Message us on WhatsApp at ${company.whatsapp} or call ${company.phone}, and we will arrange a time to show you the site.` },
-  { q: "What sizes are the flats?", a: "Flat sizes in our projects range from [sizes]. Contact us for the exact size and layout of each flat." },
-  { q: "Do you help with documents and registration?", a: "Yes. We guide buyers through booking and the documents involved. [confirm: details of the registration support you offer]" },
+  { q: "What sizes are the flats?", a: "Flat sizes depend on the project, and each project page lists them. Contact us for the exact size and layout of any flat." },
+  { q: "Do you help with documents and registration?", a: "Yes. We guide buyers through booking and the documents involved, and explain each step up to registration so you know what to prepare." },
   { q: "How can I contact Natec?", a: `Visit our office at ${company.address}, call ${company.phone}, WhatsApp ${company.whatsapp} or email ${company.email}.` },
 ];
 

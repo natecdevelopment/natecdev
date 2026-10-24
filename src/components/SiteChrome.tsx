@@ -4,7 +4,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { initials, useSession } from "@/lib/account";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
-import { Menu, X, Phone, Mail, MapPin } from "lucide-react";
+import { Menu, X, Phone, Mail, MapPin, ChevronRight, LayoutDashboard, LogIn, LogOut } from "lucide-react";
 import { company } from "@/lib/site";
 
 export const logo = { url: "/brand/natec-logo.png" };
@@ -21,6 +21,10 @@ const nav = [
   { to: "/location", label: "Location" },
   { to: "/contact", label: "Contact" },
 ] as const;
+
+/** One row of the mobile menu: clean 16px sans text, chevron on the right. */
+const mobileItem =
+  "relative flex w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-left font-sans text-[16px] font-medium text-navy transition-colors hover:bg-ivory hover:text-brand-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-red/40";
 
 export function WhatsAppIcon({ className = "h-4 w-4" }: { className?: string }) {
   return (
@@ -98,16 +102,40 @@ export function Header() {
         </div>
       </div>
       {open && (
-        <nav data-lenis-prevent className="fixed inset-0 -z-10 flex flex-col gap-1 overflow-y-auto bg-white px-6 pb-8 pt-24 text-navy md:pt-28 xl:hidden">
-          {nav.map((n) => (
-            <Link key={n.to} to={n.to} onClick={() => setOpen(false)} className="border-b border-navy/10 py-4 font-display text-3xl hover:text-brand-red" activeProps={{ className: "!text-brand-red" }} activeOptions={{ exact: true }}>
-              {n.label}
-            </Link>
-          ))}
-          <AccountLink mobile onNavigate={() => setOpen(false)} />
-          <a href={company.whatsappLink} target="_blank" rel="noreferrer" className="btn btn-primary mt-8 w-full">
-            <WhatsAppIcon /> WhatsApp
-          </a>
+        <nav data-lenis-prevent aria-label="Main menu" className="mobile-menu fixed inset-0 -z-10 flex flex-col overflow-y-auto bg-white px-5 pb-8 pt-[88px] text-navy sm:px-8 md:pt-24 xl:hidden">
+          <p className="px-3 font-sans text-[11px] font-semibold uppercase tracking-[0.16em] text-navy/50">Menu</p>
+          <ul className="mt-2">
+            {nav.map((n) => (
+              <li key={n.to}>
+                <Link
+                  to={n.to}
+                  onClick={() => setOpen(false)}
+                  className={mobileItem}
+                  activeProps={{ className: "bg-ivory !text-brand-red before:absolute before:inset-y-2.5 before:left-0 before:w-[3px] before:rounded-full before:bg-brand-red" }}
+                  activeOptions={{ exact: true }}
+                >
+                  {n.label}
+                  <ChevronRight className="h-4 w-4 text-navy/30" aria-hidden />
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-6 border-t border-navy/10 px-3 pt-5 font-sans text-[11px] font-semibold uppercase tracking-[0.16em] text-navy/50">Account</p>
+          <div className="mt-2 flex flex-col">
+            <AccountLink mobile onNavigate={() => setOpen(false)} />
+          </div>
+          <div className="mt-auto grid grid-cols-2 gap-3 pt-8">
+            <a href={company.phoneLink} className="btn border border-navy/20 !px-4 text-navy hover:border-navy">
+              <Phone className="h-4 w-4" /> Call
+            </a>
+            <a href={company.whatsappLink} target="_blank" rel="noreferrer" className="btn btn-primary !px-4">
+              <WhatsAppIcon /> WhatsApp
+            </a>
+          </div>
+          <p className="mt-4 flex gap-2 px-1 text-[13px] leading-snug text-muted-foreground">
+            <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-red" aria-hidden />
+            {company.locationShort}
+          </p>
         </nav>
       )}
     </header>
@@ -261,8 +289,16 @@ function AccountLink({ mobile, onNavigate }: { mobile?: boolean; onNavigate?: ()
     navigate({ to: "/login", replace: true });
   }
   if (!user) {
+    if (mobile) {
+      return (
+        <Link to="/login" onClick={onNavigate} className={mobileItem}>
+          <span className="flex items-center gap-3"><LogIn className="h-4 w-4 text-navy/50" aria-hidden />Login</span>
+          <ChevronRight className="h-4 w-4 text-navy/30" aria-hidden />
+        </Link>
+      );
+    }
     return (
-      <Link to="/login" onClick={onNavigate} className={mobile ? "border-b border-navy/10 py-4 font-display text-3xl hover:text-brand-red" : "inline-flex min-h-[44px] items-center whitespace-nowrap px-2 font-sans text-[13px] font-semibold uppercase tracking-[0.1em] text-navy transition-colors hover:text-brand-red"}>
+      <Link to="/login" onClick={onNavigate} className="inline-flex min-h-[44px] items-center whitespace-nowrap px-2 font-sans text-[13px] font-semibold uppercase tracking-[0.1em] text-navy transition-colors hover:text-brand-red">
         Login
       </Link>
     );
@@ -271,8 +307,16 @@ function AccountLink({ mobile, onNavigate }: { mobile?: boolean; onNavigate?: ()
   if (mobile) {
     return (
       <>
-        <Link to="/account" onClick={onNavigate} className="border-b border-navy/10 py-4 font-display text-3xl hover:text-brand-red">Dashboard</Link>
-        <button onClick={() => { onNavigate?.(); logout(); }} className="border-b border-navy/10 py-4 text-left font-display text-3xl hover:text-brand-red">Logout</button>
+        <Link to="/account" onClick={onNavigate} className={mobileItem}>
+          <span className="flex min-w-0 items-center gap-3">
+            <LayoutDashboard className="h-4 w-4 shrink-0 text-navy/50" aria-hidden />
+            <span className="truncate">Dashboard{name ? <span className="font-normal text-muted-foreground"> · {name}</span> : null}</span>
+          </span>
+          <ChevronRight className="h-4 w-4 shrink-0 text-navy/30" aria-hidden />
+        </Link>
+        <button onClick={() => { onNavigate?.(); logout(); }} className={`${mobileItem} !text-brand-red`}>
+          <span className="flex items-center gap-3"><LogOut className="h-4 w-4" aria-hidden />Logout</span>
+        </button>
       </>
     );
   }

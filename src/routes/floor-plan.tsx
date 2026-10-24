@@ -51,7 +51,17 @@ const VIEWS = {
   "3d": { label: "3D view", src: "/floorplan/floorplan-3d.webp", alt: "Sample 3D floor plan of a Natec apartment showing bedrooms, living, dining, kitchen and balconies" },
   "2d": { label: "2D plan", src: "/floorplan/floorplan-top.webp", alt: "Sample 2D top-down floor plan of a Natec apartment" },
 } as const;
-const ROOMS = ["Master bedroom", "Bedroom 2", "Bedroom 3", "Living", "Dining", "Kitchen", "Bathrooms", "Balconies"];
+/** Room sizes as labelled on the sample plan (approx. 1,250 sq ft, 3 bed / 3 bath). */
+const ROOMS = [
+  { name: "Master bedroom", size: "16′ × 15′" },
+  { name: "Bedroom 2", size: "12′ × 12′" },
+  { name: "Bedroom 3", size: "12′ × 12′" },
+  { name: "Living", size: "21′ × 18′" },
+  { name: "Dining", size: "12′ × 15′" },
+  { name: "Kitchen", size: "10′ × 15′" },
+  { name: "Bathrooms", size: "3" },
+  { name: "Balconies", size: "2 · main 13′ × 5′" },
+];
 const HIGHLIGHTS = [
   { icon: Wind, title: "Cross-ventilation", body: "Openings on facing walls let air move through the home." },
   { icon: Sun, title: "Natural light", body: "Windows in every main room for bright, daylit spaces." },
@@ -179,12 +189,13 @@ function FloorPlanPage() {
               <h3 className="!text-xl text-navy">Rooms</h3>
               <dl className="mt-4 divide-y divide-border rounded-2xl border border-border bg-white">
                 {ROOMS.map((r) => (
-                  <div key={r} className="flex items-center justify-between gap-4 px-5 py-3.5">
-                    <dt className="font-medium text-navy">{r}</dt>
-                    <dd className="text-sm text-muted-foreground">[size]</dd>
+                  <div key={r.name} className="flex items-center justify-between gap-4 px-5 py-3.5">
+                    <dt className="font-medium text-navy">{r.name}</dt>
+                    <dd className="num whitespace-nowrap text-sm text-muted-foreground">{r.size}</dd>
                   </div>
                 ))}
               </dl>
+              <p className="mt-3 text-xs text-muted-foreground">Sizes from the sample plan, approx. 1,250 sq ft in total. Each project's plan may differ.</p>
             </Reveal>
           </div>
         </div>
