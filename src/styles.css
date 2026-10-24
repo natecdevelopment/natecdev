@@ -69,6 +69,7 @@
   --font-sans: "Jost", "Jost Fallback", "Hind Siliguri", system-ui, sans-serif;
   --color-navy: var(--navy);
   --color-navy-deep: var(--navy-deep);
+  --color-whatsapp: var(--whatsapp);
   --color-brand-red: var(--red);
   --color-brand-red-hover: var(--red-hover);
   --color-ivory: var(--ivory);
@@ -89,6 +90,8 @@
   /* Brand palette (from the logo) */
   --navy: #072F63;
   --navy-deep: #041A38;
+  /* WhatsApp brand green — used only by the floating WhatsApp contact button */
+  --whatsapp: #25D366;
   --red: #9B0707;
   --red-hover: #7A0505;
   --ivory: #F7F4EE;
