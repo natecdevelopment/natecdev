@@ -72,9 +72,17 @@ function FlyHero() {
 
   useEffect(() => {
     const dir = window.matchMedia("(max-width: 767px)").matches ? "m" : "d";
-    const bitmaps: (ImageBitmap | undefined)[] = new Array(FRAMES + 1);
+    // Compressed frames are kept as blobs (≈100 KB each). Only a small window around the
+    // playhead is decoded, already scaled to the canvas, so memory stays low (200 full-HD
+    // bitmaps would be ~1.6 GB and make phones stutter) and each draw is a cheap 1:1 copy.
+    const blobs: (Blob | undefined)[] = new Array(FRAMES + 1);
+    const bitmaps = new Map<number, ImageBitmap>();
+    const decoding = new Set<number>();
+    let decodeGen = 0; // bumped on resize so stale decodes are dropped
+    const SRC = dir === "m" ? { w: 1080, h: 1920 } : { w: 1920, h: 1080 };
+    const KEEP_BEHIND = 8, KEEP_AHEAD = 24, MAX_DECODES = 3;
     let alive = true, raf = 0, lastDrawn = -1, lastChapter = 0, lastBright = false, dirty = true;
-    let lastCloud = -1;
+    let lastCloud = -1, lastFrame = 1;
     let lenis: {
       raf: (t: number) => void;
       destroy: () => void;
@@ -85,7 +93,7 @@ function FlyHero() {
     // ---- auto-play state ----
     // "idle" until conditions are met, "playing" while it runs, "done" once finished or stopped.
     let auto: "idle" | "playing" | "done" = "idle";
-    let autoY = 0, autoStart = 0, lastT = 0, peek = -1, peekFinal = false;
+    let autoY = 0, autoStart = 0, lastT = 0, peek = -1, peekFinal = false, speed = 0;
     // How far past the hero to stop: the next section's top padding plus ~1.5 lines of its
     // heading (≈1–2 lines visible on phones and desktops). Its fade-in is triggered too,
     // because a sliver this small is below the reveal threshold.
@@ -120,11 +128,11 @@ function FlyHero() {
       stopEvents.forEach((ev) => window.removeEventListener(ev, stopAuto));
       window.removeEventListener("keydown", onKey);
     }
-    // highest frame such that every frame up to it is decoded (auto-play never outruns loading)
+    // highest frame such that every frame up to it is downloaded (auto-play never outruns loading)
+    let contiguous = 0;
     const loadedUpTo = () => {
-      let i = 1;
-      while (i <= FRAMES && bitmaps[i]) i++;
-      return i - 1;
+      while (contiguous < FRAMES && blobs[contiguous + 1]) contiguous++;
+      return contiguous;
     };
     const canvas = canvasRef.current!;
     const ctx = canvas.getContext("2d", { alpha: false })!;
@@ -135,42 +143,82 @@ function FlyHero() {
       canvas.height = Math.round(canvas.clientHeight * dpr);
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
+      // Decoded frames were scaled for the old size: drop them and decode again.
+      decodeGen++;
+      bitmaps.forEach((b) => b.close());
+      bitmaps.clear();
+      decoding.clear();
       dirty = true;
     };
     sizeCanvas();
 
+    // "cover" size of a frame on this canvas
+    const coverSize = () => {
+      const s = Math.max(canvas.width / SRC.w, canvas.height / SRC.h);
+      return { w: Math.max(1, Math.round(SRC.w * s)), h: Math.max(1, Math.round(SRC.h * s)) };
+    };
     const nearest = (i: number) => {
       for (let d = 0; d < FRAMES; d++) {
-        if (i - d >= 1 && bitmaps[i - d]) return i - d;
-        if (i + d <= FRAMES && bitmaps[i + d]) return i + d;
+        if (i - d >= 1 && bitmaps.has(i - d)) return i - d;
+        if (i + d <= FRAMES && bitmaps.has(i + d)) return i + d;
       }
       return -1;
     };
     const paint = (b: ImageBitmap) => {
-      const cw = canvas.width, ch = canvas.height;
-      const s = Math.max(cw / b.width, ch / b.height);
-      const dw = b.width * s, dh = b.height * s;
-      ctx.drawImage(b, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+      const { w, h } = coverSize();
+      // Pre-scaled frames are copied 1:1; unscaled ones (old browsers) are scaled here.
+      ctx.drawImage(b, Math.round((canvas.width - w) / 2), Math.round((canvas.height - h) / 2), w, h);
+    };
+    const decode = async (i: number) => {
+      const blob = blobs[i];
+      if (!blob || bitmaps.has(i) || decoding.has(i)) return;
+      decoding.add(i);
+      const gen = decodeGen;
+      const { w, h } = coverSize();
+      try {
+        let bmp: ImageBitmap;
+        try { bmp = await createImageBitmap(blob, { resizeWidth: w, resizeHeight: h, resizeQuality: "high" }); }
+        catch { bmp = await createImageBitmap(blob); } // very old browsers: no resize options
+        if (!alive || gen !== decodeGen) return bmp.close();
+        bitmaps.set(i, bmp);
+        dirty = true;
+      } catch { /* skip */ } finally { if (gen === decodeGen) decoding.delete(i); }
+    };
+    // Decode the frames next to the playhead (mostly ahead of it), free the rest.
+    let lastDir = 1;
+    const schedule = (center: number) => {
+      const lo = center - (lastDir > 0 ? KEEP_BEHIND * 2 : KEEP_AHEAD * 1.5);
+      const hi = center + (lastDir > 0 ? KEEP_AHEAD * 1.5 : KEEP_BEHIND * 2);
+      for (const [i, b] of bitmaps) {
+        if (i < lo || i > hi) { b.close(); bitmaps.delete(i); }
+      }
+      const want: number[] = [center];
+      for (let d = 1; d <= KEEP_AHEAD; d++) {
+        const a = center + d * lastDir, b = center - d * lastDir;
+        if (a >= 1 && a <= FRAMES) want.push(a);
+        if (d <= KEEP_BEHIND && b >= 1 && b <= FRAMES) want.push(b);
+      }
+      for (const i of want) {
+        if (decoding.size >= MAX_DECODES) break;
+        if (blobs[i] && !bitmaps.has(i)) decode(i);
+      }
     };
 
-    // Load order: 1–24, then every 4th, then the rest. Max 6 in flight.
-    const order: number[] = [];
-    const seen = new Set<number>();
-    const push = (i: number) => { if (!seen.has(i)) { seen.add(i); order.push(i); } };
-    for (let i = 1; i <= 24; i++) push(i);
-    for (let i = 28; i <= FRAMES; i += 4) push(i);
-    for (let i = 1; i <= FRAMES; i++) push(i);
-    let next = 0;
+    // Download in playing order (1 → 200) so auto-play can follow right behind. Max 6 in flight.
+    let next = 1;
     const fetchOne = async (i: number) => {
-      try {
-        const blob = await (await fetch(frameSrc(dir, i))).blob();
-        const bmp = await createImageBitmap(blob);
-        if (!alive) return bmp.close();
-        bitmaps[i] = bmp;
-        dirty = true;
-      } catch { /* skip */ }
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const res = await fetch(frameSrc(dir, i));
+          if (!res.ok) throw new Error(String(res.status));
+          const blob = await res.blob();
+          if (!alive) return;
+          blobs[i] = blob;
+          return;
+        } catch { /* retry once */ }
+      }
     };
-    const pump = async () => { while (alive && next < order.length) await fetchOne(order[next++]!); };
+    const pump = async () => { while (alive && next <= FRAMES) await fetchOne(next++); };
     for (let k = 0; k < 6; k++) pump();
 
     import("lenis").then(({ default: Lenis }) => {
@@ -203,9 +251,14 @@ function FlyHero() {
           const r = Math.min(1, (t - autoStart) / 1000 / RAMP_SECONDS);
           const rampIn = r * r * (3 - 2 * r);
           const slowOut = Math.min(1, Math.max(0.12, (finalY - autoY) / (total * 0.08)));
-          let ny = autoY + (total / AUTOPLAY_SECONDS[dir]) * rampIn * slowOut * dt;
           const upTo = loadedUpTo(); // wait for frames; once all are in, allow the peek overshoot
           const limitY = upTo >= FRAMES ? finalY : start + ((upTo - 1) / (FRAMES - 1)) * total;
+          // On a slow connection, glide down gently as we near the last downloaded frame
+          // (and back up when more arrive) instead of stopping and starting with a jolt.
+          const bufferFactor = upTo >= FRAMES ? 1 : Math.max(0, Math.min(1, (limitY - autoY) / (total * 0.1)));
+          const target = (total / AUTOPLAY_SECONDS[dir]) * rampIn * slowOut * bufferFactor;
+          speed += (target - speed) * Math.min(1, dt * 4);
+          let ny = autoY + speed * dt;
           ny = Math.min(ny, Math.max(autoY, limitY), finalY);
           autoY = ny;
           lenis.scrollTo(autoY, { immediate: true, force: true });
@@ -216,9 +269,11 @@ function FlyHero() {
         const p = Math.max(0, Math.min(1, (y - el.offsetTop) / (total || 1)));
         const idx = Math.round(p * (FRAMES - 1));
         const frame = idx + 1;
+        if (frame !== lastFrame) { lastDir = frame > lastFrame ? 1 : -1; lastFrame = frame; }
+        schedule(frame);
         if (frame !== lastDrawn || dirty) {
-          const f = bitmaps[frame] ? frame : nearest(frame);
-          if (f > 0 && (f !== lastDrawn || dirty)) { paint(bitmaps[f]!); lastDrawn = f; dirty = false; }
+          const f = bitmaps.has(frame) ? frame : nearest(frame);
+          if (f > 0 && (f !== lastDrawn || dirty)) { paint(bitmaps.get(f)!); lastDrawn = f; dirty = false; }
         }
         if (progressRef.current) progressRef.current.style.transform = `scaleX(${p})`;
         const ch = CHAPTERS.findIndex((c) => inRange(frame, c.range));
@@ -243,7 +298,8 @@ function FlyHero() {
       alive = false; cancelAnimationFrame(raf); lenis?.destroy();
       removeStopListeners();
       window.removeEventListener("resize", sizeCanvas);
-      bitmaps.forEach((b) => b?.close());
+      bitmaps.forEach((b) => b.close());
+      bitmaps.clear();
     };
   }, []);
 
