@@ -236,6 +236,8 @@
   .hero-in { opacity: 1; animation: none; }
   .scroll-hint-line { animation: none; }
   .cloud-layer { animation: none; }
+  .float-pulse { animation: none; }
+  .float-pulse::before, .float-pulse::after { animation: none; opacity: 0; }
 }
 
 @utility admin-input {
@@ -255,3 +257,33 @@
 .video-list::-webkit-scrollbar { width: 6px; }
 .video-list::-webkit-scrollbar-track { background: transparent; }
 .video-list::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--navy) 30%, transparent); border-radius: 999px; }
+
+/* ---------- Floating contact buttons: pulse glow ---------- */
+/* Two soft halos breathe outwards from the button, plus a glow that swells on the button itself.
+   Each button sets --pulse-glow so the halo matches its own colour. */
+.float-pulse {
+  animation: float-pulse-glow 2.8s ease-in-out infinite;
+}
+.float-pulse::before,
+.float-pulse::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  z-index: -1;
+  border-radius: 9999px;
+  pointer-events: none;
+  background: radial-gradient(circle, var(--pulse-glow) 0%, transparent 68%);
+  animation: float-pulse-ring 2.8s ease-out infinite;
+}
+.float-pulse::after { animation-delay: 1.4s; }
+@keyframes float-pulse-ring {
+  0%   { transform: scale(.9); opacity: .7; }
+  70%  { opacity: .18; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+@keyframes float-pulse-glow {
+  0%, 100% { box-shadow: 0 10px 30px -8px rgba(4, 26, 56, .45), 0 0 0 0 var(--pulse-glow); }
+  50%      { box-shadow: 0 10px 30px -8px rgba(4, 26, 56, .45), 0 0 20px 5px var(--pulse-glow); }
+}
+.pulse-navy { --pulse-glow: color-mix(in oklab, var(--navy) 25%, var(--white)); }
+.pulse-whatsapp { --pulse-glow: color-mix(in oklab, var(--whatsapp) 55%, transparent); }
