@@ -7,13 +7,11 @@ import { MapPin, Phone, Mail, Clock, Navigation, Route as RouteIcon, School, Gra
 import { PageHero, Reveal, WhatsAppIcon } from "@/components/SiteChrome";
 import { mapEmbed, waMessage } from "@/components/ProjectsGrid";
 import { publicProjectsQuery } from "@/lib/projects-data";
-import { company } from "@/lib/site";
+import { company, office, officeDirections as DIRECTIONS, officeEmbed } from "@/lib/site";
 
 const SITE = SITE_URL;
 const TITLE = "Location — Rajendrapur Bazar, Sreepur, Gazipur | Natec Development";
 const DESC = "Natec Development's office and projects at Rajendrapur Bazar, Sreepur, Gazipur — near the Dhaka–Mymensingh Highway. Map, directions and nearby places.";
-const OFFICE_Q = "Vai Vai Market, Rajendrapur Bazar, Sreepur, Gazipur";
-const DIRECTIONS = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(OFFICE_Q)}`;
 const WA_VISIT = waMessage("Hi Natec, I'd like to book a site visit at Rajendrapur Bazar.");
 
 export const Route = createFileRoute("/location")({
@@ -42,6 +40,9 @@ export const Route = createFileRoute("/location")({
           telephone: "+8801354252400",
           email: company.email,
           address: { "@type": "PostalAddress", streetAddress: "1st Floor, Vai Vai Market, opposite Walton showroom, Dhaka–Kapasia Road, Rajendrapur Bazar", addressLocality: "Sreepur", addressRegion: "Gazipur", postalCode: "1741", addressCountry: "BD" },
+          geo: { "@type": "GeoCoordinates", latitude: office.lat, longitude: office.lng },
+          hasMap: office.mapsUrl,
+
         }),
       },
       {
@@ -99,7 +100,7 @@ const WHY = [
 
 function LocationPage() {
   const { data } = useSuspenseQuery(publicProjectsQuery);
-  const places = [{ id: "office", name: "Natec office", sub: "Vai Vai Market, Rajendrapur Bazar", q: OFFICE_Q }, ...data.map((p) => ({ id: p.id, name: p.name, sub: p.location_short || p.address, q: p.map_url || p.address }))];
+  const places = [{ id: "office", name: office.name, sub: "Vai Vai Market, Rajendrapur Bazar", q: officeEmbed }, ...data.map((p) => ({ id: p.id, name: p.name, sub: p.location_short || p.address, q: p.map_url || p.address }))];
   const [sel, setSel] = useState("office");
   const active = places.find((p) => p.id === sel) ?? places[0]!;
 
@@ -161,7 +162,11 @@ function LocationPage() {
               <li className="flex gap-3"><Mail className="mt-1 h-5 w-5 shrink-0 text-brand-red" /><a href={`mailto:${company.email}`} className="break-all hover:underline">{company.email}</a></li>
               <li className="flex gap-3"><Clock className="mt-1 h-5 w-5 shrink-0 text-brand-red" /><span>Please call or WhatsApp before you visit so the right person can meet you.</span></li>
             </ul>
-            <a href={DIRECTIONS} target="_blank" rel="noreferrer" className="btn btn-primary mt-7"><Navigation className="h-4 w-4" /> Get directions</a>
+            <div className="mt-7 flex flex-wrap items-center gap-5">
+              <a href={DIRECTIONS} target="_blank" rel="noreferrer" className="btn btn-primary"><Navigation className="h-4 w-4" /> Get directions</a>
+              <a href={office.mapsUrl} target="_blank" rel="noreferrer" className="text-sm font-semibold text-brand-red underline underline-offset-4 hover:text-navy">View on Google Maps</a>
+            </div>
+
           </Reveal>
         </div>
       </section>

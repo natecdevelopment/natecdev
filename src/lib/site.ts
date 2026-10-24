@@ -16,6 +16,27 @@ export const company = {
   website: "natecdev.com",
 };
 
+/**
+ * The office as it exists on Google Maps: the place "NATEC development ltd."
+ * https://maps.app.goo.gl/v7J6wkiyw15PP8n57
+ * Embeds and directions point at this place, not at a free-text address.
+ */
+export const office = {
+  name: "Natec Development Office",
+  /** Exact Google Maps place name — used so the embed shows the business card. */
+  mapsName: "NATEC development ltd.",
+  lat: 24.0988041,
+  lng: 90.4527001,
+  mapsUrl: "https://maps.app.goo.gl/v7J6wkiyw15PP8n57",
+};
+
+/** Embedded map showing the office pin with its business card. */
+export const officeEmbed = `https://www.google.com/maps?q=${encodeURIComponent(office.mapsName)}&output=embed`;
+
+/** Turn-by-turn directions to the office. */
+export const officeDirections = `https://www.google.com/maps/dir/?api=1&destination=${office.lat},${office.lng}`;
+
+
 export const services = [
   { title: "Land Acquisition", body: "We assist clients in identifying and acquiring land suited to their development objectives, including initial property research, coordination, and guidance on reviewing land documents and project requirements." },
   { title: "Project Planning", body: "We help clients define project goals, scope, requirements, and development stages. Careful planning supports informed decisions and effective coordination throughout a project." },

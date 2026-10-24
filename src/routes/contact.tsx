@@ -5,14 +5,12 @@ import { MapPin, Phone, Mail, Clock, Navigation, PhoneCall, CalendarCheck, FileT
 import { PageHero, Reveal, WhatsAppIcon } from "@/components/SiteChrome";
 import { InquiryForm } from "@/components/InquiryForm";
 import { FAQS } from "@/components/HomeSections";
-import { mapEmbed } from "@/components/ProjectsGrid";
-import { company } from "@/lib/site";
+import { company, office, officeDirections as DIRECTIONS, officeEmbed } from "@/lib/site";
+
 
 const SITE = SITE_URL;
 const TITLE = "Contact Natec Development Ltd. | Rajendrapur, Sreepur, Gazipur";
 const DESC = "Call, WhatsApp or visit Natec Development at Rajendrapur Bazar, Sreepur, Gazipur. Send an inquiry about our projects or book a site visit.";
-const OFFICE_Q = "Vai Vai Market, Rajendrapur Bazar, Sreepur, Gazipur";
-const DIRECTIONS = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(OFFICE_Q)}`;
 const WA = `${company.whatsappLink}?text=${encodeURIComponent("Hi Natec, I'd like to know more about your projects.")}`;
 const CONTACT_FAQS = [FAQS[2], FAQS[1], FAQS[0]].filter((f): f is NonNullable<typeof f> => !!f);
 
@@ -45,6 +43,9 @@ export const Route = createFileRoute("/contact")({
             telephone: "+8801354252400",
             email: company.email,
             address: { "@type": "PostalAddress", streetAddress: "1st Floor, Vai Vai Market, opposite Walton showroom, Dhaka–Kapasia Road, Rajendrapur Bazar", addressLocality: "Sreepur", addressRegion: "Gazipur", postalCode: "1741", addressCountry: "BD" },
+            geo: { "@type": "GeoCoordinates", latitude: office.lat, longitude: office.lng },
+            hasMap: office.mapsUrl,
+
             contactPoint: [
               { "@type": "ContactPoint", telephone: "+8801354252400", contactType: "sales", areaServed: "BD" },
               { "@type": "ContactPoint", telephone: "+8801990665923", contactType: "customer service", areaServed: "BD" },
@@ -116,13 +117,17 @@ function ContactPage() {
         <div className="container-x grid gap-10 lg:grid-cols-[1.1fr_1fr]">
           <Reveal><InquiryForm title="Send us a message" /></Reveal>
           <Reveal delay={120} className="flex flex-col gap-6">
-            <iframe title="Map of the Natec office" src={mapEmbed(OFFICE_Q)} className="h-80 w-full rounded-2xl border-0 shadow-lg lg:h-full lg:min-h-[360px]" loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
+            <iframe title={`Map of the ${office.name}`} src={officeEmbed} className="h-80 w-full rounded-2xl border-0 shadow-lg lg:h-full lg:min-h-[360px]" loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
             <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-white p-5">
               <div className="text-sm text-navy">
                 <p className="flex gap-2"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-brand-red" />{company.address}</p>
                 <p className="mt-2 flex gap-2"><Clock className="mt-0.5 h-4 w-4 shrink-0 text-brand-red" />Call or WhatsApp before you visit so we can meet you.</p>
               </div>
-              <a href={DIRECTIONS} target="_blank" rel="noreferrer" className="btn btn-primary"><Navigation className="h-4 w-4" /> Get directions</a>
+              <div className="flex flex-wrap items-center gap-5">
+                <a href={DIRECTIONS} target="_blank" rel="noreferrer" className="btn btn-primary"><Navigation className="h-4 w-4" /> Get directions</a>
+                <a href={office.mapsUrl} target="_blank" rel="noreferrer" className="text-sm font-semibold text-brand-red underline underline-offset-4 hover:text-navy">View on Google Maps</a>
+              </div>
+
             </div>
           </Reveal>
         </div>

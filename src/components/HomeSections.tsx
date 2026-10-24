@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent }
 import { ProjectFacts } from "@/components/ProjectFacts";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, MapPin, Building2, Trees, Wallet, ClipboardList, HardHat, Play, MessageCircle, LayoutGrid, FileText, Phone, Mail, BedDouble, Bath, Sofa, UtensilsCrossed, CookingPot, Fence, Ruler, Facebook } from "lucide-react";
-import { company, directors } from "@/lib/site";
+import { company, directors, office, officeEmbed } from "@/lib/site";
 import { PersonFemaleIcon, PersonMaleIcon } from "@/components/PersonIcons";
 import { Reveal, WhatsAppIcon } from "@/components/SiteChrome";
 import { InquiryForm } from "@/components/InquiryForm";
@@ -298,7 +298,7 @@ export function Location() {
           <p className="mt-3 text-xs text-muted-foreground">Distances are approximate. <Link to="/location" className="underline decoration-brand-red underline-offset-2 hover:text-navy">Directions and more nearby places</Link></p>
         </Reveal>
         <Reveal className="overflow-hidden rounded-2xl shadow-xl">
-          <iframe title="Natec Development office location" src="https://www.google.com/maps?q=Rajendrapur+Bazar,+Sreepur,+Gazipur,+Bangladesh&output=embed" className="block h-[380px] w-full border-0 md:h-full md:min-h-[480px]" loading="lazy" />
+          <iframe title={`${office.name} location`} src={officeEmbed} className="block h-[380px] w-full border-0 md:h-full md:min-h-[480px]" loading="lazy" />
         </Reveal>
       </div>
     </section>
