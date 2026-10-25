@@ -97,7 +97,7 @@ function Dashboard() {
         <Head icon={Wallet} title="Client accounts" to="/admin/accounts" search={{ tab: "clients" }} more="Open accounts" />
         {isLoading || !d ? <Skeleton className="h-28 w-full" /> : (
           <>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
               {[
                 ["Total sale value", taka(d.money.sale), `${d.money.clients} clients · ${d.money.logins} with login`, false],
                 ["Collected", taka(d.money.paid), `${pct.toFixed(1)}% of sale value`, false],
@@ -105,9 +105,9 @@ function Dashboard() {
                 ["Overdue", taka(d.money.overdue), d.overdue.length ? `${d.overdue.length} client${d.overdue.length === 1 ? "" : "s"} behind` : "Nobody is behind", d.money.overdue > 0],
                 ["Late fees", taka(d.money.latePending), `Pending · ${taka(d.money.lateCollected)} collected`, d.money.latePending > 0],
               ].map(([k, v, sub, red]) => (
-                <div key={String(k)} className={`rounded-xl p-4 ${red ? "bg-brand-red/5 ring-1 ring-brand-red/20" : "bg-ivory"}`}>
-                  <p className="text-xs uppercase tracking-wider text-muted-foreground">{k}</p>
-                  <p className={`num mt-1.5 whitespace-nowrap text-xl md:text-2xl ${red ? "text-brand-red" : "text-navy"}`}>{v}</p>
+                <div key={String(k)} className={`min-w-0 rounded-xl p-3 sm:p-4 ${k === "Total sale value" ? "col-span-2 lg:col-span-1" : ""} ${red ? "bg-brand-red/5 ring-1 ring-brand-red/20" : "bg-ivory"}`}>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground sm:text-xs">{k}</p>
+                  <p className={`num mt-1.5 whitespace-nowrap text-lg sm:text-xl md:text-2xl ${red ? "text-brand-red" : "text-navy"}`}>{v}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{sub}</p>
                 </div>
               ))}
@@ -117,7 +117,7 @@ function Dashboard() {
         )}
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 xl:grid-cols-2">
         <Card>
           <Head icon={CalendarClock} title="Due in the next 30 days" />
           {isLoading || !d ? <Skeleton className="h-40 w-full" /> : !d.soon.length ? <Empty t="No instalments due in the next 30 days." /> : (
@@ -125,9 +125,9 @@ function Dashboard() {
               {d.soon.map((r) => { const c = d.byId.get(r.client_id); const days = daysBetween(d.today, r.due_date); return (
                 <li key={r.id}>
                   <Link to="/admin/accounts/$id" params={{ id: r.client_id }} className="flex items-center gap-3 py-2.5 hover:bg-ivory/60">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-navy text-xs font-semibold text-white">{c?.flat_no || "—"}</span>
-                    <span className="min-w-0 flex-1"><span className="block truncate font-medium text-navy">{c?.full_name}</span><span className="text-xs text-muted-foreground">{r.label}</span></span>
-                    <span className="text-right"><span className="block font-semibold text-navy">{taka(r.amount - r.paid_amount)}</span><span className="text-xs text-muted-foreground">{fmtDate(r.due_date)} · {days === 0 ? "today" : `in ${days} day${days === 1 ? "" : "s"}`}</span></span>
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-navy text-[11px] font-semibold text-white sm:h-10 sm:w-10 sm:text-xs">{c?.flat_no || "—"}</span>
+                    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-navy sm:text-base">{c?.full_name}</span><span className="block truncate text-xs text-muted-foreground">{r.label}<span className="sm:hidden"> · {days === 0 ? "today" : `in ${days}d`}</span></span></span>
+                    <span className="shrink-0 text-right"><span className="block whitespace-nowrap text-sm font-semibold text-navy sm:text-base">{taka(r.amount - r.paid_amount)}</span><span className="block whitespace-nowrap text-[11px] text-muted-foreground sm:text-xs">{fmtDate(r.due_date)}<span className="hidden sm:inline"> · {days === 0 ? "today" : `in ${days} day${days === 1 ? "" : "s"}`}</span></span></span>
                   </Link>
                 </li>
               ); })}
@@ -142,9 +142,9 @@ function Dashboard() {
               {d.overdue.map((o) => { const c = d.byId.get(o.id); return (
                 <li key={o.id}>
                   <Link to="/admin/accounts/$id" params={{ id: o.id }} className="flex items-center gap-3 py-2.5 hover:bg-ivory/60">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-red text-xs font-semibold text-white">{c?.flat_no || "—"}</span>
-                    <span className="min-w-0 flex-1"><span className="block truncate font-medium text-navy">{c?.full_name}</span><span className="text-xs text-muted-foreground">Since {fmtDate(o.since)} · {daysBetween(o.since, d.today)} days</span></span>
-                    <span className="text-right"><span className="block font-semibold text-brand-red">{taka(o.amount)}</span>{o.fee > 0 && <span className="text-xs text-brand-red/80">+ {taka(o.fee)} late fee</span>}</span>
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-red text-[11px] font-semibold text-white sm:h-10 sm:w-10 sm:text-xs">{c?.flat_no || "—"}</span>
+                    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-navy sm:text-base">{c?.full_name}</span><span className="block truncate text-xs text-muted-foreground">Since {fmtDate(o.since)} · {daysBetween(o.since, d.today)} days</span></span>
+                    <span className="shrink-0 text-right"><span className="block whitespace-nowrap text-sm font-semibold text-brand-red sm:text-base">{taka(o.amount)}</span>{o.fee > 0 && <span className="block whitespace-nowrap text-[11px] text-brand-red/80 sm:text-xs">+ {taka(o.fee)} fee</span>}</span>
                   </Link>
                 </li>
               ); })}
@@ -159,9 +159,9 @@ function Dashboard() {
               {d.payments.map((p) => { const c = d.byId.get(p.client_id); return (
                 <li key={p.id}>
                   <Link to="/admin/accounts/$id" params={{ id: p.client_id }} className="flex items-center gap-3 py-2.5 hover:bg-ivory/60">
-                    <span className="w-24 shrink-0 text-xs text-muted-foreground">{fmtDate(p.paid_on)}</span>
-                    <span className="min-w-0 flex-1"><span className="block truncate font-medium text-navy">{c?.flat_no} · {c?.full_name}</span><span className="text-xs text-muted-foreground">{p.type} · {p.method}</span></span>
-                    <span className={`font-semibold ${p.type === "Late fee" ? "text-brand-red" : "text-navy"}`}>{taka(p.amount)}</span>
+                    <span className="hidden w-24 shrink-0 text-xs text-muted-foreground sm:block">{fmtDate(p.paid_on)}</span>
+                    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-navy sm:text-base">{c?.flat_no} · {c?.full_name}</span><span className="block truncate text-xs text-muted-foreground"><span className="sm:hidden">{fmtDate(p.paid_on)} · </span>{p.type} · {p.method}</span></span>
+                    <span className={`shrink-0 whitespace-nowrap text-sm font-semibold sm:text-base ${p.type === "Late fee" ? "text-brand-red" : "text-navy"}`}>{taka(p.amount)}</span>
                   </Link>
                 </li>
               ); })}
@@ -187,14 +187,14 @@ function Dashboard() {
         </Card>
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1.4fr_1fr]">
+      <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-6 xl:grid-cols-[1.4fr_1fr]">
         <Card>
           <Head icon={HardHat} title="Construction progress" to="/admin/construction" />
           {isLoading || !d ? <Skeleton className="h-28 w-full" /> : !d.projects.length ? <Empty t="No current projects." /> : (
             <ul className="space-y-4">
               {d.projects.map((p) => (
                 <li key={p.id}>
-                  <div className="flex items-baseline justify-between gap-3 text-sm"><span className="font-medium text-navy">{p.name}</span><span className="text-muted-foreground">{p.status} · <b className="text-navy">{p.progress_pct}%</b></span></div>
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm"><span className="font-medium text-navy">{p.name}</span><span className="text-muted-foreground">{p.status} · <b className="text-navy">{p.progress_pct}%</b></span></div>
                   <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-navy/10"><div className="h-full rounded-full bg-navy" style={{ width: `${Math.min(100, Number(p.progress_pct))}%` }} /></div>
                   {p.status_updated_at && <p className="mt-1 text-[11px] text-muted-foreground">Updated {fmtDate(p.status_updated_at.slice(0, 10))}</p>}
                 </li>
