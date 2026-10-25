@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { WhatsAppIcon } from "@/components/SiteChrome";
 import { PaymentsTable, StatusChip, SummaryCards } from "@/components/ClientMoney";
 import { PAYMENT_METHODS, PAYMENT_TYPES, fmtDate, printStatement, type ClientRow, type PaymentRow } from "@/lib/account";
-import { allocatePayment, isExtra, scheduleOrder, taka, type PlanForm } from "@/lib/money";
+import { allocatePayment, isExtra, lateFee, scheduleOrder, taka, todayIso, totalLateFee, type PlanForm } from "@/lib/money";
 import { PaymentPlanForm, initialPlanState, planBlocker, type PlanState } from "@/components/admin/PaymentPlanForm";
 import { inviteClient } from "@/lib/admin-accounts.functions";
 import { DeleteLoginsDialog, type LoginTarget } from "@/components/admin/PortalLogins";
@@ -133,7 +133,7 @@ function ClientDetail() {
           <div key={k}><p className="text-xs uppercase tracking-wider text-muted-foreground">{k}</p><p className="break-words font-medium text-navy">{v}</p></div>
         ))}
       </Card>
-      <SummaryCards c={c} b={d.b} />
+      <SummaryCards c={c} b={d.b} late={totalLateFee(d.inst, todayIso())} />
 
       <Schedule clientId={c.id} rows={d.inst} total={Number(c.total_price)} bookingDate={c.booking_date ?? ""} onChange={refresh} />
 
@@ -234,7 +234,7 @@ function Schedule({ clientId, rows, total, bookingDate, onChange }: { clientId: 
                 : <input type="date" defaultValue={r.due_date} aria-label="Due date" onBlur={(e) => e.target.value && e.target.value !== r.due_date && upd(r.id, { due_date: e.target.value })} className="admin-input" />}
               <input defaultValue={r.label} aria-label="Label" onBlur={(e) => e.target.value !== r.label && upd(r.id, { label: e.target.value })} className="admin-input" />
               <input type="number" min={0} defaultValue={Number(r.amount)} aria-label="Amount" onBlur={(e) => Number(e.target.value) !== Number(r.amount) && upd(r.id, { amount: Number(e.target.value) })} className="admin-input" />
-              <span className="text-xs text-muted-foreground">{taka(r.paid_amount)} paid</span>
+              <span className="text-xs text-muted-foreground">{taka(r.paid_amount)} paid{(() => { const lf = lateFee(r, todayIso()); return lf.fee > 0 ? <span className="block font-medium text-brand-red">Late fee {taka(lf.fee)} · {lf.days} days</span> : null; })()}</span>
               <StatusChip s={r.status} />
               <Confirm title="Delete this row?" description={`${r.label} — ${taka(r.amount)}`} onConfirm={() => del(r.id)}>
                 {(ask) => <button onClick={ask} className={btnDanger} aria-label="Delete row"><Trash2 className="h-4 w-4" /></button>}

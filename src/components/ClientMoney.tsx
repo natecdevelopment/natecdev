@@ -1,6 +1,6 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { fmtDate, type BalanceRow, type ClientRow, type InstalmentRow, type PaymentRow } from "@/lib/account";
-import { isExtra, scheduleOrder, taka } from "@/lib/money";
+import { isExtra, lateFee, scheduleOrder, taka, todayIso } from "@/lib/money";
 
 export function PaidRing({ pct }: { pct: number }) {
   const reduce = useReducedMotion();
@@ -17,17 +17,19 @@ export function PaidRing({ pct }: { pct: number }) {
   );
 }
 
-export function SummaryCards({ c, b }: { c: ClientRow; b: BalanceRow | null }) {
+/** `late` = total late fee (0.06%/day on overdue instalments with nothing paid). */
+export function SummaryCards({ c, b, late = 0 }: { c: ClientRow; b: BalanceRow | null; late?: number }) {
   const overdue = Number(b?.overdue_amount ?? 0) > 0;
   const cards: [string, string, (string | undefined)?, (boolean | undefined)?][] = [
     ["Total price", taka(c.total_price)],
     ["Paid so far", taka(b?.total_paid ?? 0)],
-    ["Amount due", taka(b?.amount_due ?? c.total_price)],
+    ["Amount due", taka(b?.amount_due ?? c.total_price), late > 0 ? `+ ${taka(late)} late fee` : undefined, late > 0],
     ["Next instalment", b?.next_due_date ? taka(b.next_due_amount) : "—", b?.next_due_date ? `${overdue ? "Overdue since " : "Due "}${fmtDate(b.next_due_date)}` : undefined, overdue],
     ["Last payment", b?.last_payment_on ? taka(b.last_payment_amount) : "—", b?.last_payment_on ? fmtDate(b.last_payment_on) : undefined],
+    ...(late > 0 ? [["Late fee", taka(late), "0.06% per day on unpaid overdue instalments", true] as [string, string, string, boolean]] : []),
   ];
   return (
-    <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
+    <div className={`grid grid-cols-2 gap-3 ${late > 0 ? "md:grid-cols-3 xl:grid-cols-6" : "xl:grid-cols-5"}`}>
       {cards.map(([k, v, sub, red]) => (
         <div key={k} className={`rounded-2xl bg-white p-5 shadow-sm ${red ? "ring-2 ring-brand-red" : ""}`}>
           <p className="eyebrow !text-[10px] text-muted-foreground">{k}</p>
@@ -53,7 +55,7 @@ export function ScheduleTable({ rows }: { rows: InstalmentRow[] }) {
           <span className="text-sm text-muted-foreground md:order-none">{isExtra(i.label) ? "Up front" : fmtDate(i.due_date)}</span>
           <span className="justify-self-end md:hidden"><StatusChip s={i.status ?? ""} /></span>
           <span className="text-navy">{i.label}</span>
-          <span className="justify-self-end font-semibold text-navy md:justify-self-start">{taka(i.amount)}{Number(i.paid_amount) > 0 && Number(i.paid_amount) < Number(i.amount) ? <span className="block text-xs font-normal text-muted-foreground">{taka(i.paid_amount)} paid</span> : null}</span>
+          <span className="justify-self-end font-semibold text-navy md:justify-self-start">{taka(i.amount)}{Number(i.paid_amount) > 0 && Number(i.paid_amount) < Number(i.amount) ? <span className="block text-xs font-normal text-muted-foreground">{taka(i.paid_amount)} paid</span> : null}{(() => { const lf = lateFee({ ...i, amount: Number(i.amount) }, todayIso()); return lf.fee > 0 ? <span className="block text-xs font-medium text-brand-red">Late fee {taka(lf.fee)} · {lf.days} days</span> : null; })()}</span>
           <span className="hidden md:block"><StatusChip s={i.status ?? ""} /></span>
         </li>
       ))}

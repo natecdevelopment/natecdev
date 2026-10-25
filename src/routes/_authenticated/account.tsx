@@ -10,7 +10,7 @@ import { ProjectCard } from "@/components/ProjectCard";
 import { normalizeBdPhone } from "@/components/InquiryForm";
 import { publicProjectsQuery } from "@/lib/projects-data";
 import { fmtDate, initials, printStatement, type BalanceRow, type ClientRow, type DocRow, type InstalmentRow, type PaymentRow, type Profile } from "@/lib/account";
-import { taka } from "@/lib/money";
+import { taka, todayIso, totalLateFee } from "@/lib/money";
 import { PaidRing, PaymentsTable, ScheduleTable, SummaryCards } from "@/components/ClientMoney";
 import { company } from "@/lib/site";
 import { setFirstPassword } from "@/lib/login.functions";
@@ -340,7 +340,7 @@ function Payments({ d }: { d: { client: ClientRow; balance: BalanceRow | null; i
         <H>Payments</H>
         <button onClick={() => printStatement({ client: d.client, projectName: pname, balance: d.balance, instalments: d.instalments, payments: d.payments })} className="btn border border-navy text-navy"><Download className="h-4 w-4" /> Download statement (PDF)</button>
       </div>
-      <SummaryCards c={d.client} b={d.balance} />
+      <SummaryCards c={d.client} b={d.balance} late={totalLateFee(d.instalments.map((i) => ({ label: i.label ?? "", due_date: i.due_date ?? "", amount: Number(i.amount), paid_amount: Number(i.paid_amount) })), todayIso())} />
       <div className={`${card} flex flex-col items-center gap-6 sm:flex-row`}>
         <PaidRing pct={pct} />
         <div className="w-full">

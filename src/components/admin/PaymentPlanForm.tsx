@@ -3,7 +3,7 @@ import { CheckCircle2, Lock, Plus, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { btnDanger, btnSm } from "@/components/admin/ui";
 import { fmtDate } from "@/lib/account";
-import { addDays, computePlan, isExtra, taka, type PlanForm, type ScheduleRow } from "@/lib/money";
+import { addDays, computePlan, isExtra, lateFee, taka, todayIso, type PlanForm, type ScheduleRow } from "@/lib/money";
 
 export type PlanState = { plan: PlanForm; rows: ScheduleRow[]; dirty: boolean };
 
@@ -125,12 +125,13 @@ export function PaymentPlanForm({ value, onChange, bookingDate, build, paidToggl
                   <div>
                     <input inputMode="numeric" value={String(r.amount)} aria-label={`${r.label} amount`} aria-invalid={r.amount < paid} onChange={(ev) => setRow(i, { amount: num(ev.target.value) })} className="admin-input" />
                     {lock && <p className={`mt-0.5 text-[11px] ${r.amount < paid ? "font-medium text-brand-red" : "text-muted-foreground"}`}>{r.amount < paid ? `Cannot be below ${taka(paid)} paid` : `${taka(paid)} paid`}</p>}
+                    {paidToggle && r.id && (() => { const lf = lateFee(r, todayIso()); return lf.fee > 0 ? <p className="mt-0.5 text-[11px] font-medium text-brand-red">Late fee {taka(lf.fee)} · {lf.days} days</p> : null; })()}
                   </div>
                   {paidToggle && (() => {
                     const full = r.amount > 0 && paid >= r.amount, part = paid > 0 && !full;
                     const can = paidToggle.enabled && !!r.id && r.amount > 0;
                     return (
-                      <label title={can ? (full ? "Mark as not paid" : "Mark as paid") : (paidToggle.disabledReason ?? "Save the schedule first")} className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium ${full ? "border-green-700/30 bg-green-50 text-green-800" : part ? "border-brand-red/30 text-brand-red" : "border-navy/20 text-navy"} ${can ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}>
+                      <label title={can ? (full ? "Mark as not paid" : part ? "Add another (partial) payment" : "Record a full or partial payment") : (paidToggle.disabledReason ?? "Save the schedule first")} className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium ${full ? "border-green-700/30 bg-green-50 text-green-800" : part ? "border-brand-red/30 text-brand-red" : "border-navy/20 text-navy"} ${can ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}>
                         <input type="checkbox" className="h-4 w-4 accent-green-700" checked={full} disabled={!can} onChange={(ev) => paidToggle.onToggle(r, ev.target.checked)} aria-label={`${r.label} paid`} />
                         {full ? "Paid" : part ? "Part" : "Paid"}
                       </label>

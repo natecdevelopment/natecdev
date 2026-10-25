@@ -266,7 +266,7 @@ function ClientEditor() {
         <Card>
           <PaymentPlanForm value={f.plan} onChange={(plan) => setF({ ...f, plan })} bookingDate={f.home.booking_date} build={(p) => rebuildKeepingPaid(p, f.home.booking_date, f.plan.rows)}
             paidToggle={{ enabled: !dirty["Payment plan & schedule"], disabledReason: "Save your schedule changes first", onToggle: (row, paid) => setMark({ row, paid }) }} />
-          <p className="mt-3 text-xs text-muted-foreground">Tick "Paid" to record a payment for a row (and any earlier unpaid rows); untick to undo a payment made this way. Paid and partly-paid instalments are locked. Payments are applied to the oldest instalments first.</p>
+          <p className="mt-3 text-xs text-muted-foreground">Tick "Paid" to record a full or partial payment for a row (earlier unpaid rows are paid first); untick to undo a payment made this way. An overdue instalment with nothing paid gets a late fee of 0.06% per day; any partial payment stops it.</p>
           {errors.plan && <p role="alert" className="mt-2 text-sm font-medium text-brand-red">{errors.plan}</p>}
         </Card>
       )}
@@ -510,6 +510,7 @@ type InstRow = { id: string; due_date: string; amount: number | string; paid_amo
 function MarkPaidDialog({ clientId, target, paid, inst, payments, onClose, onDone }: { clientId: string; target: ScheduleRow; paid: boolean; inst: InstRow[]; payments: PaymentRow[]; onClose: () => void; onDone: () => Promise<void> }) {
   const [date, setDate] = useState(today());
   const [method, setMethod] = useState<string>("Cash");
+  const [amountText, setAmountText] = useState("");
   const [busy, setBusy] = useState(false);
   const order = [...inst].sort((a, b) => a.due_date.localeCompare(b.due_date) || a.id.localeCompare(b.id));
   const k = order.findIndex((r) => r.id === target.id);
@@ -523,12 +524,14 @@ function MarkPaidDialog({ clientId, target, paid, inst, payments, onClose, onDon
   const tickTotal = ticks.reduce((s, p) => s + Number(p.amount), 0);
   const canUndo = tickTotal >= excess;
   const typeOf = (l: string) => ((PAYMENT_TYPES as readonly string[]).includes(l) ? l : "Instalment");
+  const amount = amountText.trim() === "" ? payAmount : Number(amountText.replace(/[^\d]/g, ""));
+  const partial = amount > 0 && amount < payAmount;
 
   async function go() {
     setBusy(true);
     try {
       if (paid) {
-        const r = await supabase.from("payments").insert({ client_id: clientId, paid_on: date, amount: payAmount, type: typeOf(target.label), method, reference: TICK_REF, note: `Marked as paid: ${open.map((x) => x.label).join(", ")}` });
+        const r = await supabase.from("payments").insert({ client_id: clientId, paid_on: date, amount, type: typeOf(target.label), method, reference: TICK_REF, note: partial ? `Partial payment towards: ${open.map((x) => x.label).join(", ")}` : `Marked as paid: ${open.map((x) => x.label).join(", ")}` });
         if (r.error) throw r.error;
       } else {
         let left = excess;
@@ -542,7 +545,7 @@ function MarkPaidDialog({ clientId, target, paid, inst, payments, onClose, onDon
       }
       const re = await supabase.rpc("admin_reallocate_payments", { _client_id: clientId });
       if (re.error) throw re.error;
-      toast.success(paid ? `Recorded ${taka(payAmount)} — ${target.label} marked paid` : `${target.label} marked as not paid`);
+      toast.success(paid ? (partial ? `Recorded a partial payment of ${taka(amount)}` : `Recorded ${taka(amount)} — ${target.label} marked paid`) : `${target.label} marked as not paid`);
       await onDone(); onClose();
     } catch (e) { toast.error(e instanceof Error ? e.message : "Could not update."); } finally { setBusy(false); }
   }
@@ -550,10 +553,14 @@ function MarkPaidDialog({ clientId, target, paid, inst, payments, onClose, onDon
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
-        <DialogHeader><DialogTitle>{paid ? `Mark "${target.label}" as paid?` : `Mark "${target.label}" as not paid?`}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{paid ? `Payment for "${target.label}"` : `Mark "${target.label}" as not paid?`}</DialogTitle></DialogHeader>
         {paid ? (
           <div className="space-y-3 text-sm">
-            <p className="text-muted-foreground">A payment of <b className="text-navy">{taka(payAmount)}</b> will be recorded{open.length > 1 ? <> for {open.map((x) => x.label).join(", ")} (earlier unpaid rows are paid first)</> : null}.</p>
+            <p className="text-muted-foreground">Still to pay{open.length > 1 ? <> for {open.map((x) => x.label).join(", ")} (earlier unpaid rows are paid first)</> : null}: <b className="text-navy">{taka(payAmount)}</b>.</p>
+            <label className="block font-medium text-navy">Amount received (৳)
+              <input inputMode="numeric" value={amountText} placeholder={String(payAmount)} onChange={(e) => setAmountText(e.target.value.replace(/[^\d]/g, ""))} className="admin-input mt-1" />
+              <span className="mt-1 block text-xs font-normal text-muted-foreground">{partial ? `Partial payment — ${taka(payAmount - amount)} will still be due. A partly-paid instalment gets no late fee.` : "Leave as is for the full amount, or enter less for a partial payment."}</span>
+            </label>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="font-medium text-navy">Paid on<input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="admin-input mt-1" /></label>
               <label className="font-medium text-navy">Method<select value={method} onChange={(e) => setMethod(e.target.value)} className="admin-input mt-1">{PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}</select></label>
@@ -566,7 +573,7 @@ function MarkPaidDialog({ clientId, target, paid, inst, payments, onClose, onDon
         )}
         <div className="mt-4 flex justify-end gap-2">
           <button onClick={onClose} className={btnSm}>Cancel</button>
-          {(paid ? payAmount > 0 && !!date : canUndo && excess > 0) && <button disabled={busy} onClick={go} className="btn btn-primary !py-2 disabled:opacity-50">{busy ? "Saving…" : paid ? "Record payment" : "Mark not paid"}</button>}
+          {(paid ? payAmount > 0 && amount > 0 && !!date : canUndo && excess > 0) && <button disabled={busy} onClick={go} className="btn btn-primary !py-2 disabled:opacity-50">{busy ? "Saving…" : paid ? (partial ? "Record partial payment" : "Record payment") : "Mark not paid"}</button>}
         </div>
       </DialogContent>
     </Dialog>

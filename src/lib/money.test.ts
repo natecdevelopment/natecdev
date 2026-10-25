@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allocatePayment, generateSchedule, taka } from "./money";
+import { allocatePayment, generateSchedule, lateFee, taka, totalLateFee } from "./money";
 
 describe("money rules", () => {
   it("formats taka with lakh grouping", () => expect(taka(1250000)).toBe("৳ 12,50,000"));
@@ -68,5 +68,18 @@ describe("rebuildKeepingPaid", () => {
     expect(fresh).toHaveLength(4);
     expect(fresh.reduce((s, r) => s + r.amount, 0)).toBe(420000);
     expect(out.reduce((s, r) => s + r.amount, 0)).toBe(500000);
+  });
+});
+
+describe("lateFee", () => {
+  const row = { label: "Instalment 1 of 24", due_date: "2026-06-05", amount: 250000, paid_amount: 0 };
+  it("charges 0.06% of the amount per day once the due date has passed and nothing is paid", () => {
+    expect(lateFee(row, "2026-06-05")).toEqual({ days: 0, fee: 0 });
+    expect(lateFee(row, "2026-06-15")).toEqual({ days: 10, fee: 1500 });
+  });
+  it("stops when any amount has been paid, and never applies to up-front items", () => {
+    expect(lateFee({ ...row, paid_amount: 1000 }, "2026-07-01").fee).toBe(0);
+    expect(lateFee({ ...row, label: "Down payment" }, "2027-01-01").fee).toBe(0);
+    expect(totalLateFee([row, { ...row, due_date: "2026-06-10" }], "2026-06-15")).toBe(1500 + 750);
   });
 });

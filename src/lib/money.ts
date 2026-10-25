@@ -160,3 +160,21 @@ export function guessPlan(rows: ScheduleRow[], bookingDate: string, total: numbe
     downDue: down?.due_date ?? addDays(bookingDate || today, 30), round: inst.length ? round : 1000,
   };
 }
+
+/* ---------- Late fee ---------- */
+/** Daily late fee: 0.06% of the instalment amount for every day after its due date. */
+export const LATE_FEE_RATE = 0.0006;
+const dayMs = 86400000;
+const isoDay = (iso: string) => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10));
+/**
+ * Late fee for one instalment as of `today` (YYYY-MM-DD). Charged only when the due date has passed and
+ * nothing at all has been paid towards it; any partial payment stops the fee. Up-front items have no fee.
+ */
+export function lateFee(r: { label: string; due_date: string; amount: number | string; paid_amount?: number | string | null; paid?: number }, today: string) {
+  const paid = Number(r.paid_amount ?? r.paid ?? 0), amount = Number(r.amount);
+  if (isExtra(r.label) || !r.due_date || paid > 0 || amount <= 0) return { days: 0, fee: 0 };
+  const days = Math.floor((isoDay(today) - isoDay(r.due_date)) / dayMs);
+  return days > 0 ? { days, fee: Math.round(amount * LATE_FEE_RATE * days) } : { days: 0, fee: 0 };
+}
+export const totalLateFee = (rows: Parameters<typeof lateFee>[0][], today: string) => rows.reduce((s, r) => s + lateFee(r, today).fee, 0);
+export const todayIso = () => { const d = new Date(Date.now() + 6 * 3600000); return d.toISOString().slice(0, 10); }; // Bangladesh date (UTC+6)
