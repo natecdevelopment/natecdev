@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { CheckCircle2, Lock, Plus, Trash2 } from "lucide-react";
+import { Check, CheckCircle2, Lock, Pencil, Plus, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { btnDanger, btnSm } from "@/components/admin/ui";
+import { btnSm } from "@/components/admin/ui";
 import { fmtDate } from "@/lib/account";
 import { addDays, computePlan, isExtra, lateFee, taka, todayIso, type PlanForm, type ScheduleRow } from "@/lib/money";
 
@@ -40,6 +40,9 @@ export function PaymentPlanForm({ value, onChange, bookingDate, build, paidToggl
   const calc = useMemo(() => computePlan(plan, bookingDate), [plan, bookingDate]);
   const [pending, setPending] = useState<PlanForm | null>(null);
   const [kept, setKept] = useState(false);
+  // Client editor: saved rows are read-only until their Edit button is pressed.
+  const [editing, setEditing] = useState<Set<string>>(new Set());
+  const toggleEdit = (k: string) => setEditing((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
   function setPlan(patch: Partial<PlanForm>) {
     const next = { ...plan, ...patch };
@@ -116,14 +119,17 @@ export function PaymentPlanForm({ value, onChange, bookingDate, build, paidToggl
             <ul className="space-y-2">
               {rows.map((r, i) => ({ r, i })).sort((a, b) => Number(!isExtra(a.r.label)) - Number(!isExtra(b.r.label))).map(({ r, i }) => {
                 const paid = r.paid ?? 0, lock = paid > 0;
+                const key = r.id ?? `n${i}`;
+                const ro = !!paidToggle && !!r.id && !editing.has(key); // read-only until "Edit"
+                const roCls = ro ? "!border-transparent !bg-ivory/50 !shadow-none focus:!ring-0" : "";
                 return (
-                <li key={r.id ?? `n${i}`} className={`grid grid-cols-[1fr_auto] gap-2 rounded-lg border border-border p-2 sm:border-0 sm:p-0 ${paidToggle ? "sm:grid-cols-[150px_1fr_140px_auto_auto]" : "sm:grid-cols-[150px_1fr_140px_auto]"} ${lock ? "sm:bg-ivory/60" : ""}`}>
+                <li key={key} className={`grid grid-cols-[1fr_auto] items-start gap-2 rounded-lg border border-border p-2 sm:border-0 sm:p-0 ${paidToggle ? "sm:grid-cols-[150px_minmax(0,1fr)_140px_auto_auto]" : "sm:grid-cols-[150px_minmax(0,1fr)_140px_auto]"} ${lock ? "sm:bg-ivory/60" : ""}`}>
                   {isExtra(r.label)
-                    ? <span className="col-span-2 flex items-center px-3 text-sm text-muted-foreground sm:col-span-1">Up front · no date</span>
-                    : <input type="date" value={r.due_date} disabled={lock} aria-label={`${r.label} due date`} onChange={(ev) => setRow(i, { due_date: ev.target.value })} className="admin-input col-span-2 disabled:opacity-70 sm:col-span-1" />}
-                  <input value={r.label} aria-label="Label" onChange={(ev) => setRow(i, { label: ev.target.value })} className="admin-input col-span-2 sm:col-span-1" />
+                    ? <span className="col-span-2 flex h-10 items-center px-3 text-sm text-muted-foreground sm:col-span-1">Up front · no date</span>
+                    : <input type="date" value={r.due_date} disabled={lock || ro} aria-label={`${r.label} due date`} onChange={(ev) => setRow(i, { due_date: ev.target.value })} className={`admin-input col-span-2 disabled:opacity-80 sm:col-span-1 ${roCls}`} />}
+                  <input value={r.label} readOnly={ro} aria-label="Label" onChange={(ev) => setRow(i, { label: ev.target.value })} className={`admin-input col-span-2 sm:col-span-1 ${roCls}`} />
                   <div>
-                    <input inputMode="numeric" value={String(r.amount)} aria-label={`${r.label} amount`} aria-invalid={r.amount < paid} onChange={(ev) => setRow(i, { amount: num(ev.target.value) })} className="admin-input" />
+                    <input inputMode="numeric" value={String(r.amount)} readOnly={ro} aria-label={`${r.label} amount`} aria-invalid={r.amount < paid} onChange={(ev) => setRow(i, { amount: num(ev.target.value) })} className={`admin-input ${roCls}`} />
                     {lock && <p className={`mt-0.5 text-[11px] ${r.amount < paid ? "font-medium text-brand-red" : "text-muted-foreground"}`}>{r.amount < paid ? `Cannot be below ${taka(paid)} paid` : `${taka(paid)} paid`}</p>}
                     {paidToggle && r.id && (() => { const lf = lateFee(r, todayIso()); return lf.fee > 0 ? <p className="mt-0.5 text-[11px] font-medium text-brand-red">Late fee {taka(lf.fee)} · {lf.days} days</p> : null; })()}
                   </div>
@@ -137,9 +143,17 @@ export function PaymentPlanForm({ value, onChange, bookingDate, build, paidToggl
                       </label>
                     );
                   })()}
-                  {lock
-                    ? <span title="Paid — locked" className="inline-flex h-9 w-9 items-center justify-center text-navy"><Lock className="h-4 w-4" aria-label="Paid — locked" /></span>
-                    : <button type="button" onClick={() => onChange({ ...value, rows: rows.filter((_, j) => j !== i), dirty: true })} className={btnDanger} aria-label={`Remove ${r.label}`}><Trash2 className="h-4 w-4" /></button>}
+                  <div className="flex items-center gap-1.5">
+                    {paidToggle && r.id && (
+                      <button type="button" onClick={() => toggleEdit(key)} title={ro ? "Edit this row" : "Done editing"} aria-label={ro ? `Edit ${r.label}` : `Done editing ${r.label}`}
+                        className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition ${ro ? "border-navy/20 text-navy hover:bg-navy/5" : "border-green-700/30 bg-green-50 text-green-800"}`}>
+                        {ro ? <Pencil className="h-4 w-4" /> : <Check className="h-4 w-4" />}
+                      </button>
+                    )}
+                    {lock
+                      ? <span title="Paid — locked" className="inline-flex h-9 w-9 shrink-0 items-center justify-center text-navy"><Lock className="h-4 w-4" aria-label="Paid — locked" /></span>
+                      : <button type="button" onClick={() => onChange({ ...value, rows: rows.filter((_, j) => j !== i), dirty: true })} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-brand-red/30 text-brand-red transition hover:bg-brand-red/5" aria-label={`Remove ${r.label}`}><Trash2 className="h-4 w-4" /></button>}
+                  </div>
                 </li>
                 );
               })}

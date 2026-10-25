@@ -85,6 +85,13 @@
       "when": 1792606148251,
       "tag": "0011_clients_is_demo",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792606208251,
+      "tag": "0012_late_fees",
+      "breakpoints": true
     }
   ]
 }

@@ -11,7 +11,9 @@ export type InstalmentRow = Database["public"]["Views"]["instalments_live"]["Row
 export type BalanceRow = Database["public"]["Views"]["client_balances"]["Row"];
 export type DocRow = Database["public"]["Tables"]["client_documents"]["Row"];
 
-export const PAYMENT_TYPES = ["Booking money", "Down payment", "Instalment", "Car parking", "Other"] as const;
+export const PAYMENT_TYPES = ["Booking money", "Down payment", "Instalment", "Car parking", "Other", "Late fee"] as const;
+/** Late fee payments are kept separately: never applied to instalments or the amount due. */
+export const LATE_FEE_TYPE = "Late fee";
 export const PAYMENT_METHODS = ["Cash", "Bank", "Cheque", "bKash", "Nagad", "Other"] as const;
 
 /** Client-side session (null while loading = undefined). */

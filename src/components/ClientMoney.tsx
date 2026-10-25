@@ -22,7 +22,7 @@ export function SummaryCards({ c, b, late = 0 }: { c: ClientRow; b: BalanceRow |
   const overdue = Number(b?.overdue_amount ?? 0) > 0;
   const cards: [string, string, (string | undefined)?, (boolean | undefined)?][] = [
     ["Total price", taka(c.total_price)],
-    ["Paid so far", taka(b?.total_paid ?? 0)],
+    ["Paid so far", taka(b?.total_paid ?? 0), Number(b?.late_fee_paid ?? 0) > 0 ? `+ ${taka(b?.late_fee_paid ?? 0)} late fee paid` : undefined],
     ["Amount due", taka(b?.amount_due ?? c.total_price), late > 0 ? `+ ${taka(late)} late fee` : undefined, late > 0],
     ["Next instalment", b?.next_due_date ? taka(b.next_due_amount) : "—", b?.next_due_date ? `${overdue ? "Overdue since " : "Due "}${fmtDate(b.next_due_date)}` : undefined, overdue],
     ["Last payment", b?.last_payment_on ? taka(b.last_payment_amount) : "—", b?.last_payment_on ? fmtDate(b.last_payment_on) : undefined],

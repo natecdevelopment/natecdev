@@ -11,8 +11,8 @@ import { PaymentPlanForm, planBlocker, type PlanState } from "@/components/admin
 import { ADMIN_LOCK_TIP, DeleteAccountDialog, useAdminEmails, type DeleteTarget } from "@/components/admin/AccountAdmin";
 import { normalizeBdPhone } from "@/components/InquiryForm";
 import { inviteClient, updateLoginEmail } from "@/lib/admin-accounts.functions";
-import { PAYMENT_METHODS, PAYMENT_TYPES, fmtDate, type ClientRow, type PaymentRow } from "@/lib/account";
-import { guessPlan, rebuildKeepingPaid, scheduleOrder, taka, type ScheduleRow } from "@/lib/money";
+import { LATE_FEE_TYPE, PAYMENT_METHODS, PAYMENT_TYPES, fmtDate, type ClientRow, type PaymentRow } from "@/lib/account";
+import { guessPlan, lateFee, rebuildKeepingPaid, scheduleOrder, taka, type ScheduleRow } from "@/lib/money";
 
 export const Route = createFileRoute("/admin/accounts/clients/$id/edit")({
   head: () => ({ meta: [{ title: "Edit client — Natec Admin" }, { name: "robots", content: "noindex" }] }),
@@ -511,6 +511,9 @@ function MarkPaidDialog({ clientId, target, paid, inst, payments, onClose, onDon
   const [date, setDate] = useState(today());
   const [method, setMethod] = useState<string>("Cash");
   const [amountText, setAmountText] = useState("");
+  const [feeText, setFeeText] = useState<string | null>(null);
+  // Late fees need the 0012_late_fees database update (keeps them out of the instalments and amount due).
+  const feeReady = useQuery({ queryKey: ["late-fee-ready"], staleTime: Infinity, queryFn: async () => !(await supabase.from("client_balances").select("late_fee_paid").limit(1)).error });
   const [busy, setBusy] = useState(false);
   const order = [...inst].sort((a, b) => a.due_date.localeCompare(b.due_date) || a.id.localeCompare(b.id));
   const k = order.findIndex((r) => r.id === target.id);
@@ -518,7 +521,7 @@ function MarkPaidDialog({ clientId, target, paid, inst, payments, onClose, onDon
   const open = upTo.filter((r) => Number(r.paid_amount) < Number(r.amount));
   const payAmount = open.reduce((s, r) => s + Number(r.amount) - Number(r.paid_amount), 0);
   const before = order.slice(0, k).reduce((s, r) => s + Number(r.amount), 0);
-  const totalPaid = payments.reduce((s, p) => s + Number(p.amount), 0);
+  const totalPaid = payments.filter((p) => p.type !== LATE_FEE_TYPE).reduce((s, p) => s + Number(p.amount), 0);
   const excess = Math.max(0, totalPaid - before);
   const ticks = payments.filter((p) => p.reference === TICK_REF).sort((a, b) => b.paid_on.localeCompare(a.paid_on) || b.created_at.localeCompare(a.created_at));
   const tickTotal = ticks.reduce((s, p) => s + Number(p.amount), 0);
@@ -526,6 +529,10 @@ function MarkPaidDialog({ clientId, target, paid, inst, payments, onClose, onDon
   const typeOf = (l: string) => ((PAYMENT_TYPES as readonly string[]).includes(l) ? l : "Instalment");
   const amount = amountText.trim() === "" ? payAmount : Number(amountText.replace(/[^\d]/g, ""));
   const partial = amount > 0 && amount < payAmount;
+  // Late fee as of the payment date: only for overdue rows with nothing paid; a partial payment carries no fee.
+  const feeRows = open.map((r) => ({ r, lf: lateFee({ label: r.label, due_date: r.due_date, amount: Number(r.amount), paid_amount: Number(r.paid_amount) }, date || today()) })).filter((x) => x.lf.fee > 0);
+  const feeDefault = partial ? 0 : feeRows.reduce((s, x) => s + x.lf.fee, 0);
+  const fee = feeText == null ? feeDefault : Number(feeText || 0);
 
   async function go() {
     setBusy(true);
@@ -533,6 +540,10 @@ function MarkPaidDialog({ clientId, target, paid, inst, payments, onClose, onDon
       if (paid) {
         const r = await supabase.from("payments").insert({ client_id: clientId, paid_on: date, amount, type: typeOf(target.label), method, reference: TICK_REF, note: partial ? `Partial payment towards: ${open.map((x) => x.label).join(", ")}` : `Marked as paid: ${open.map((x) => x.label).join(", ")}` });
         if (r.error) throw r.error;
+        if (fee > 0 && feeReady.data) {
+          const lf = await supabase.from("payments").insert({ client_id: clientId, paid_on: date, amount: fee, type: LATE_FEE_TYPE, method, reference: "Late fee", note: `Late fee: ${feeRows.map((x) => `${x.r.label} (${x.lf.days} days)`).join(", ") || target.label}` });
+          if (lf.error) throw lf.error;
+        }
       } else {
         let left = excess;
         for (const p of ticks) {
@@ -545,7 +556,7 @@ function MarkPaidDialog({ clientId, target, paid, inst, payments, onClose, onDon
       }
       const re = await supabase.rpc("admin_reallocate_payments", { _client_id: clientId });
       if (re.error) throw re.error;
-      toast.success(paid ? (partial ? `Recorded a partial payment of ${taka(amount)}` : `Recorded ${taka(amount)} — ${target.label} marked paid`) : `${target.label} marked as not paid`);
+      toast.success(paid ? (partial ? `Recorded a partial payment of ${taka(amount)}` : `Recorded ${taka(amount)} — ${target.label} marked paid${fee > 0 && feeReady.data ? ` (+ ${taka(fee)} late fee)` : ""}`) : `${target.label} marked as not paid`);
       await onDone(); onClose();
     } catch (e) { toast.error(e instanceof Error ? e.message : "Could not update."); } finally { setBusy(false); }
   }
@@ -561,6 +572,16 @@ function MarkPaidDialog({ clientId, target, paid, inst, payments, onClose, onDon
               <input inputMode="numeric" value={amountText} placeholder={String(payAmount)} onChange={(e) => setAmountText(e.target.value.replace(/[^\d]/g, ""))} className="admin-input mt-1" />
               <span className="mt-1 block text-xs font-normal text-muted-foreground">{partial ? `Partial payment — ${taka(payAmount - amount)} will still be due. A partly-paid instalment gets no late fee.` : "Leave as is for the full amount, or enter less for a partial payment."}</span>
             </label>
+            {(feeDefault > 0 || feeText != null) && (
+              <label className="block font-medium text-navy">Late fee received (৳) <span className="font-normal text-muted-foreground">— kept separate</span>
+                <input inputMode="numeric" value={feeText ?? String(feeDefault)} disabled={!feeReady.data} onChange={(e) => setFeeText(e.target.value.replace(/[^\d]/g, ""))} className="admin-input mt-1 disabled:opacity-60" />
+                <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                  {feeReady.data
+                    ? <>0.06% per day: {feeRows.map((x) => `${x.r.label} ${x.lf.days} days`).join(", ") || "—"}. Recorded as a separate "Late fee" payment — it does not change the plan total or the amount due. Enter 0 to waive.</>
+                    : <span className="text-amber-800">Late fees can be recorded after the database update (Lovable: apply migration 0012_late_fees). The instalment payment is still recorded.</span>}
+                </span>
+              </label>
+            )}
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="font-medium text-navy">Paid on<input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="admin-input mt-1" /></label>
               <label className="font-medium text-navy">Method<select value={method} onChange={(e) => setMethod(e.target.value)} className="admin-input mt-1">{PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}</select></label>
