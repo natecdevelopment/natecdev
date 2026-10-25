@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { AlertTriangle, Loader2, Trash2 } from "lucide-react";
+import { AlertTriangle, ChevronDown, History, List, Loader2, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { deleteAccount } from "@/lib/admin-accounts.functions";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -132,30 +132,75 @@ export function DeleteAccountDialog({ targets, onClose, onDeleted }: { targets: 
   );
 }
 
-const ACTION_LABEL: Record<string, string> = { update_client: "Updated client", update_login_email: "Changed login email", delete_account: "Deleted account", suspend: "Suspended", reactivate: "Reactivated", make_client: "Made client" };
+const ACTION_LABEL: Record<string, string> = {
+  update_client: "Updated client", update_login_email: "Changed login email", delete_account: "Deleted account", suspend: "Suspended",
+  reactivate: "Reactivated", make_client: "Made client", import_clients: "Imported from Excel", create_login: "Created login",
+  reset_login: "Reset login", reset_password: "Reset password", delete_login: "Deleted login", link_login: "Linked login",
+};
+type AuditRow = { id: string; created_at: string; action: string; target_email: string | null; admin_email: string; details: unknown };
+const when = (iso: string) => new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
 
-export function ActivityList() {
-  const q = useQuery({
-    queryKey: ["admin", "audit"],
-    queryFn: async () => { const { data, error } = await supabase.from("admin_audit_log").select("*").order("created_at", { ascending: false }).limit(20); if (error) throw error; return data ?? []; },
-  });
+function ActivityRow({ e }: { e: AuditRow }) {
+  const d = e.details as { mode?: string; file?: string; updated?: string[] } | null;
+  const target = e.target_email || (d?.file ? `${d.file}${d.updated?.length ? ` · ${d.updated.length} flat${d.updated.length === 1 ? "" : "s"}` : ""}` : "");
   return (
-    <Card className="mt-8">
-      <h2 className="font-display !text-lg text-navy">Activity</h2>
-      {q.isLoading ? <p className="mt-2 text-sm text-muted-foreground">Loading…</p> : !q.data?.length ? <p className="mt-2 text-sm text-muted-foreground">No activity yet.</p> : (
-        <ul className="mt-3 divide-y divide-border text-sm">
-          {q.data.map((e) => {
-            const d = e.details as { mode?: string } | null;
-            return (
-              <li key={e.id} className="grid gap-1 py-2 sm:grid-cols-[150px_minmax(0,1fr)_minmax(0,1fr)] sm:gap-3">
-                <span className="text-muted-foreground">{new Date(e.created_at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}</span>
-                <span className="text-navy"><strong>{ACTION_LABEL[e.action] ?? e.action}</strong> <span className="truncate text-muted-foreground">{e.target_email || "—"}</span>{d?.mode === "all" && <span className="ml-1 text-xs text-brand-red">(incl. client record)</span>}</span>
-                <span className="truncate text-muted-foreground" title={e.admin_email}>by {e.admin_email}</span>
-              </li>
-            );
-          })}
-        </ul>
+    <li className="grid gap-0.5 py-2.5 sm:grid-cols-[150px_minmax(0,1fr)_minmax(0,220px)] sm:gap-3">
+      <span className="text-xs text-muted-foreground sm:text-sm">{when(e.created_at)}</span>
+      <span className="min-w-0 text-navy"><strong>{ACTION_LABEL[e.action] ?? e.action}</strong>{target && <span className="ml-1 [overflow-wrap:anywhere] text-muted-foreground">{target}</span>}{d?.mode === "all" && <span className="ml-1 text-xs text-brand-red">(incl. client record)</span>}</span>
+      <span className="truncate text-xs text-muted-foreground sm:text-sm" title={e.admin_email}>by {e.admin_email}</span>
+    </li>
+  );
+}
+
+/** Admin activity: a small collapsed panel; "All activities" opens the full log in a pop-up. */
+export function ActivityList() {
+  const [open, setOpen] = useState(false);
+  const [all, setAll] = useState(false);
+  const [filter, setFilter] = useState("");
+  const recent = useQuery({
+    queryKey: ["admin", "audit"],
+    queryFn: async () => { const { data, error } = await supabase.from("admin_audit_log").select("*").order("created_at", { ascending: false }).limit(5); if (error) throw error; return (data ?? []) as AuditRow[]; },
+  });
+  const full = useQuery({
+    queryKey: ["admin", "audit", "all"],
+    enabled: all,
+    queryFn: async () => { const { data, error } = await supabase.from("admin_audit_log").select("*").order("created_at", { ascending: false }).limit(500); if (error) throw error; return (data ?? []) as AuditRow[]; },
+  });
+  const f = filter.trim().toLowerCase();
+  const rows = (full.data ?? []).filter((e) => !f || [ACTION_LABEL[e.action] ?? e.action, e.target_email ?? "", e.admin_email, JSON.stringify(e.details ?? "")].join(" ").toLowerCase().includes(f));
+  const latest = recent.data?.[0];
+  return (
+    <Card className="mt-8 !p-0">
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-3 px-5 py-4 text-left">
+        <History className="h-4 w-4 shrink-0 text-brand-red" />
+        <span className="min-w-0 flex-1">
+          <span className="block font-display text-lg text-navy">Activities</span>
+          {latest && !open && <span className="block truncate text-xs text-muted-foreground">Last: {ACTION_LABEL[latest.action] ?? latest.action} · {when(latest.created_at)}</span>}
+        </span>
+        <ChevronDown className={`h-4 w-4 shrink-0 text-navy transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="border-t border-border px-5 pb-4">
+          {recent.isLoading ? <p className="py-3 text-sm text-muted-foreground">Loading…</p> : !recent.data?.length ? <p className="py-3 text-sm text-muted-foreground">No activity yet.</p> : (
+            <ul className="divide-y divide-border text-sm">{recent.data.slice(0, 3).map((e) => <ActivityRow key={e.id} e={e} />)}</ul>
+          )}
+          <button type="button" onClick={() => setAll(true)} className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-navy/20 px-3.5 py-2 text-xs font-semibold text-navy transition hover:bg-navy/5">
+            <List className="h-3.5 w-3.5" /> All activities
+          </button>
+        </div>
       )}
+      <Dialog open={all} onOpenChange={setAll}>
+        <DialogContent className="flex max-h-[85vh] w-[calc(100vw-2rem)] max-w-3xl flex-col">
+          <DialogHeader><DialogTitle>All activities</DialogTitle><DialogDescription>Every admin change, newest first.</DialogDescription></DialogHeader>
+          <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search by action, email, flat or file…" className="admin-input" aria-label="Search activities" />
+          <div data-lenis-prevent className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1">
+            {full.isLoading ? <p className="py-4 text-sm text-muted-foreground">Loading…</p> : !rows.length ? <p className="py-4 text-sm text-muted-foreground">Nothing found.</p> : (
+              <ul className="divide-y divide-border text-sm">{rows.map((e) => <ActivityRow key={e.id} e={e} />)}</ul>
+            )}
+          </div>
+          {full.data && <p className="text-xs text-muted-foreground">{rows.length} of {full.data.length} shown</p>}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
