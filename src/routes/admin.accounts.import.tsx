@@ -1,22 +1,22 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, CheckCircle2, FileSpreadsheet, Upload } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Download, FileSpreadsheet, Upload } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { logAudit } from "@/components/admin/AccountAdmin";
 import { Card, PageTitle, btnSm } from "@/components/admin/ui";
-import { PAYMENT_METHODS } from "@/lib/account";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { fmtDate } from "@/lib/account";
 import { taka } from "@/lib/money";
 import { readXlsx } from "@/lib/xlsx-lite";
-import { buildClientPlan, parseNatecWorkbook, sizeRange, type ParsedWorkbook } from "@/lib/sheet-import";
+import { flatKey, parseClientWorkbook, type ClientEntry } from "@/lib/client-workbook";
+import { buildAgreementRows } from "@/lib/schedule-import";
 
 export const Route = createFileRoute("/admin/accounts/import")({ component: ImportClients });
 
-const today = () => new Date().toISOString().slice(0, 10);
-const norm = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "").replace(/h/g, "");
-
 type Result = { flat: string; ok: boolean; message: string };
+type Current = { id: string; full_name: string; flat_no: string; booking_date: string | null; agreement_date: string | null; total_price: number; instTotal: number; instCount: number; paidTotal: number; payCount: number };
 
 /** Supabase/PostgREST errors are plain objects, so `instanceof Error` misses them. */
 function errText(e: unknown): string {
@@ -27,111 +27,137 @@ function errText(e: unknown): string {
   }
   return String(e);
 }
-/** The database keeps flat sizes as whole square feet. */
-const wholeSft = (n: number | null) => (n == null ? null : Math.round(n));
+const csv = (v: unknown) => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
 
+/**
+ * Admin: add and update client accounts from the "Natec clients" Excel (Clients · Schedule · Payments).
+ * For each flat in the file, its schedule and payments are replaced by the file. Accounts and logins are never deleted.
+ */
 function ImportClients() {
   const qc = useQueryClient();
   const [fileName, setFileName] = useState("");
-  const [parsed, setParsed] = useState<ParsedWorkbook | null>(null);
+  const [entries, setEntries] = useState<ClientEntry[] | null>(null);
+  const [errors, setErrors] = useState<string[]>([]);
   const [projectId, setProjectId] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [undatedOn, setUndatedOn] = useState(today());
-  const [method, setMethod] = useState<string>("Other");
-  const [updateFacts, setUpdateFacts] = useState(true);
+  const [clearOthers, setClearOthers] = useState(false);
+  const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState(0);
   const [results, setResults] = useState<Result[]>([]);
 
   const projects = useQuery({ queryKey: ["admin", "project-names"], queryFn: async () => (await supabase.from("projects").select("id, name, kind").order("sort_order")).data ?? [] });
-  const existing = useQuery({
-    queryKey: ["admin", "client-flats", projectId], enabled: !!projectId,
-    queryFn: async () => new Set(((await supabase.from("clients").select("flat_no").eq("project_id", projectId)).data ?? []).map((r) => r.flat_no.toUpperCase())),
+  const current = useQuery({
+    queryKey: ["admin", "import-current", projectId],
+    enabled: !!projectId,
+    queryFn: async (): Promise<Current[]> => {
+      const { data, error } = await supabase.from("clients").select("id, full_name, flat_no, booking_date, agreement_date, total_price").eq("project_id", projectId);
+      if (error) throw error;
+      const ids = (data ?? []).map((c) => c.id);
+      const [inst, pays] = ids.length
+        ? await Promise.all([supabase.from("instalments").select("client_id, amount").in("client_id", ids), supabase.from("payments").select("client_id, amount").in("client_id", ids)])
+        : [{ data: [] }, { data: [] }];
+      return (data ?? []).map((c) => {
+        const i = (inst.data ?? []).filter((x) => x.client_id === c.id), p = (pays.data ?? []).filter((x) => x.client_id === c.id);
+        return { ...c, total_price: Number(c.total_price), instTotal: i.reduce((s, x) => s + Number(x.amount), 0), instCount: i.length, paidTotal: p.reduce((s, x) => s + Number(x.amount), 0), payCount: p.length };
+      });
+    },
   });
+  const byFlat = new Map((current.data ?? []).map((c) => [flatKey(c.flat_no), c]));
+  const inFile = new Set((entries ?? []).map((e) => e.flat));
+  const others = (current.data ?? []).filter((c) => !inFile.has(flatKey(c.flat_no)) && (c.instCount || c.payCount || c.total_price));
 
   async function onFile(f: File | undefined) {
     if (!f) return;
-    setResults([]); setParsed(null); setFileName(f.name);
+    setResults([]);
     try {
-      const p = parseNatecWorkbook(await readXlsx(f));
-      if (!p.clients.length) throw new Error("No clients found in this file. Use the Natec client payment sheet format.");
-      setParsed(p);
-      setSelected(new Set(p.clients.map((c) => c.flat_no)));
-      const match = (projects.data ?? []).find((x) => p.projectName && norm(x.name).includes(norm(p.projectName).replace(/^sobuj|^sbuj/, "")));
-      setProjectId(match?.id ?? "");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not read this file.");
-    }
+      const r = parseClientWorkbook(await readXlsx(f));
+      setFileName(f.name); setEntries(r.clients); setErrors(r.errors);
+      setSelected(new Set(r.clients.filter((c) => !c.problems.length).map((c) => c.flat)));
+      const name = r.clients.find((c) => c.project)?.project.toLowerCase();
+      const match = name && (projects.data ?? []).find((p) => p.name.toLowerCase() === name);
+      if (match) setProjectId(match.id);
+    } catch (e) { toast.error(`Could not read the file: ${errText(e)}`); }
   }
 
-  const rows = useMemo(() => (parsed?.clients ?? []).map((c) => {
-    const plan = buildClientPlan(c, parsed!.schedule, undatedOn, method);
-    const paid = plan.pays.reduce((s, p) => s + p.amount, 0);
-    return { c, plan, paid, due: c.total_price - paid, exists: existing.data?.has(c.flat_no) ?? false };
-  }), [parsed, undatedOn, method, existing.data]);
+  const problemsOf = (e: ClientEntry) => [...e.problems, ...(!byFlat.has(e.flat) && !e.info.full_name ? ["New flat: the client name is required."] : [])];
+  const ready = (e: ClientEntry) => !!projectId && current.isSuccess && !problemsOf(e).length;
+  const toggle = (f: string) => setSelected((s) => { const n = new Set(s); n.has(f) ? n.delete(f) : n.add(f); return n; });
+  const chosen = (entries ?? []).filter((e) => selected.has(e.flat) && ready(e));
 
-  const toImport = rows.filter((r) => selected.has(r.c.flat_no) && !r.exists);
+  async function backup() {
+    const cur = current.data ?? [];
+    const ids = cur.map((c) => c.id);
+    if (!ids.length) { toast.message("No clients in this project yet."); return; }
+    const [inst, pays] = await Promise.all([
+      supabase.from("instalments").select("client_id, due_date, label, amount, paid_amount").in("client_id", ids).order("due_date"),
+      supabase.from("payments").select("client_id, paid_on, type, amount, method, reference, note").in("client_id", ids).order("paid_on"),
+    ]);
+    const flat = new Map(cur.map((c) => [c.id, c]));
+    const lines = [["Kind", "Flat", "Client", "Date", "Label / type", "Amount", "Paid", "Method", "Reference", "Note"].join(",")];
+    for (const c of cur) lines.push(["Client", c.flat_no, c.full_name, c.booking_date ?? "", "Total price", c.total_price, "", "", "", ""].map(csv).join(","));
+    for (const r of inst.data ?? []) lines.push(["Schedule", flat.get(r.client_id)?.flat_no, flat.get(r.client_id)?.full_name, r.due_date, r.label, r.amount, r.paid_amount, "", "", ""].map(csv).join(","));
+    for (const r of pays.data ?? []) lines.push(["Payment", flat.get(r.client_id)?.flat_no, flat.get(r.client_id)?.full_name, r.paid_on, r.type, r.amount, "", r.method, r.reference, r.note].map(csv).join(","));
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8" }));
+    a.download = `natec-accounts-backup-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click(); URL.revokeObjectURL(a.href);
+  }
 
-  async function runImport() {
-    if (!parsed || !projectId) return;
-    setBusy(true); setProgress(0);
+  async function wipe(clientId: string) {
+    const p = await supabase.from("payments").delete().eq("client_id", clientId); if (p.error) throw p.error;
+    const i = await supabase.from("instalments").delete().eq("client_id", clientId); if (i.error) throw i.error;
+  }
+
+  async function run() {
+    setConfirm(false); setBusy(true);
     const out: Result[] = [];
-    const project = projects.data?.find((p) => p.id === projectId);
-    try {
-      if (updateFacts && parsed.units.length) {
-        try {
-          const r1 = await supabase.from("projects").update({ units_per_floor: parsed.units.length, flat_sizes: sizeRange(parsed.units) }).eq("id", projectId);
-          if (r1.error) throw r1.error;
-          const { data: have, error: e0 } = await supabase.from("project_units").select("id, label").eq("project_id", projectId);
-          if (e0) throw e0;
-          for (const [i, u] of parsed.units.entries()) {
-            const label = `Unit ${u.letter}`;
-            const found = (have ?? []).find((h) => h.label.trim().toUpperCase() === label.toUpperCase() || h.label.trim().toUpperCase() === u.letter);
-            const r = found
-              ? await supabase.from("project_units").update({ size_sqft: wholeSft(u.size_sft) }).eq("id", found.id)
-              : await supabase.from("project_units").insert({ project_id: projectId, label, size_sqft: wholeSft(u.size_sft), sort_order: i + 1 });
-            if (r.error) throw r.error;
-          }
-          out.push({ flat: "Project", ok: true, message: `Flat sizes ${sizeRange(parsed.units)}, ${parsed.units.length} units per floor, unit types updated` });
-        } catch (e) {
-          out.push({ flat: "Project", ok: false, message: `Project details not updated: ${errText(e)} (clients are still imported)` });
+    for (const e of chosen) {
+      const cur = byFlat.get(e.flat);
+      try {
+        const info = e.info;
+        const fields = {
+          ...(info.full_name ? { full_name: info.full_name } : {}), ...(info.phone ? { phone: info.phone } : {}), ...(info.email ? { email: info.email } : {}),
+          ...(info.address ? { address: info.address } : {}), ...(info.floor ? { floor: info.floor } : {}), ...(info.size_sft != null ? { size_sft: info.size_sft } : {}),
+          ...(info.parking != null ? { parking: info.parking } : {}), ...(info.booking_date ? { booking_date: info.booking_date } : {}),
+          ...(info.agreement_date ? { agreement_date: info.agreement_date } : {}), ...(info.notes ? { payment_plan_note: info.notes } : {}),
+          total_price: info.total_price ?? (e.schedule ? e.schedule.total : 0),
+        };
+        let id = cur?.id;
+        if (id) { const u = await supabase.from("clients").update(fields).eq("id", id); if (u.error) throw u.error; }
+        else {
+          const ins = await supabase.from("clients").insert({ full_name: info.full_name!, project_id: projectId, flat_no: e.flat, ...fields }).select("id").single();
+          if (ins.error) throw ins.error; id = ins.data.id;
         }
-      }
-      for (const [n, r] of toImport.entries()) {
-        const c = r.c;
-        try {
-          const note = [
-            `${parsed.schedule.length} instalments per the ${parsed.projectName || project?.name || "project"} schedule${parsed.penaltyRate != null ? ` (late penalty ${(parsed.penaltyRate * 100).toFixed(1)}%)` : ""}.`,
-            `Imported from ${fileName} on ${today()}. Dates not in the sheet (booking, down payment, payment dates) use ${undatedOn}.`,
-            ...c.issues,
-          ].join("\n");
-          const { data: client, error } = await supabase.from("clients").insert({
-            full_name: c.full_name, phone: c.phone, address: c.address, project_id: projectId,
-            flat_no: c.flat_no, floor: c.floor, size_sft: wholeSft(c.size_sft), total_price: c.total_price, payment_plan_note: note,
-          }).select("id").single();
-          if (error) throw error;
-          const inst = r.plan.rows.map((x) => ({ ...x, client_id: client.id }));
-          if (inst.length) { const e2 = await supabase.from("instalments").insert(inst); if (e2.error) throw e2.error; }
-          if (r.plan.pays.length) { const e3 = await supabase.from("payments").insert(r.plan.pays.map((p) => ({ ...p, client_id: client.id }))); if (e3.error) throw e3.error; }
-          out.push({ flat: c.flat_no, ok: true, message: `${c.full_name} — ${taka(c.total_price)}, paid ${taka(r.paid)}` });
-        } catch (e) {
-          out.push({ flat: c.flat_no, ok: false, message: errText(e) });
+        // Replace payments (always) and the schedule (when the file has one for this flat).
+        const p = await supabase.from("payments").delete().eq("client_id", id); if (p.error) throw p.error;
+        if (e.schedule) {
+          const d = await supabase.from("instalments").delete().eq("client_id", id); if (d.error) throw d.error;
+          const plan = { ...e.schedule, agreementDate: info.agreement_date ?? cur?.agreement_date ?? null };
+          const rows = buildAgreementRows(plan, [], info.booking_date ?? cur?.booking_date ?? null);
+          const r = await supabase.from("instalments").insert(rows.map((x) => ({ client_id: id!, due_date: x.due_date, amount: x.amount, label: x.label }))); if (r.error) throw r.error;
         }
-        setProgress(Math.round(((n + 1) / toImport.length) * 100));
+        if (e.payments.length) { const r = await supabase.from("payments").insert(e.payments.map((x) => ({ ...x, client_id: id! }))); if (r.error) throw r.error; }
+        const re = await supabase.rpc("admin_reallocate_payments", { _client_id: id }); if (re.error) throw re.error;
+        const paid = e.payments.reduce((s, x) => s + x.amount, 0);
+        out.push({ flat: e.flat, ok: true, message: `${cur ? "Updated" : "Created"} — ${info.full_name ?? cur?.full_name ?? ""}, total ${taka(fields.total_price)}, ${e.schedule ? `${e.schedule.rows.length} schedule rows` : "schedule unchanged"}, ${e.payments.length} payments (${taka(paid)})` });
+      } catch (err) { out.push({ flat: e.flat, ok: false, message: errText(err) }); }
+    }
+    if (clearOthers) {
+      for (const c of others) {
+        try {
+          await wipe(c.id);
+          const u = await supabase.from("clients").update({ total_price: 0 }).eq("id", c.id); if (u.error) throw u.error;
+          out.push({ flat: c.flat_no, ok: true, message: `Cleared — ${c.full_name}: schedule and payments removed, account and login kept` });
+        } catch (err) { out.push({ flat: c.flat_no, ok: false, message: `Not cleared: ${errText(err)}` }); }
       }
-      const clientRes = out.filter((x) => x.flat !== "Project");
-      await logAudit("import_clients", "", { file: fileName, project: project?.name, imported: clientRes.filter((x) => x.ok).map((x) => x.flat), failed: clientRes.filter((x) => !x.ok).map((x) => x.flat) }).catch(() => undefined);
-      setResults(out);
-      qc.invalidateQueries({ queryKey: ["admin"] });
-      const okN = clientRes.filter((x) => x.ok).length;
-      okN === clientRes.length ? toast.success(`${okN} clients imported`) : toast.error(`${okN} imported, ${clientRes.length - okN} failed — see the list below`);
-      setTimeout(() => document.getElementById("import-result")?.scrollIntoView({ behavior: "smooth" }), 50);
-    } catch (e) {
-      toast.error(`Import failed: ${errText(e)}`);
-    } finally { setBusy(false); }
+    }
+    await logAudit("import_clients", "", { file: fileName, project: projects.data?.find((p) => p.id === projectId)?.name, updated: out.filter((r) => r.ok).map((r) => r.flat), failed: out.filter((r) => !r.ok).map((r) => r.flat), clearedOthers: clearOthers }).catch(() => undefined);
+    setResults(out); setBusy(false);
+    await current.refetch();
+    qc.invalidateQueries({ queryKey: ["admin"] }); qc.invalidateQueries({ queryKey: ["account"] });
+    out.every((r) => r.ok) ? toast.success(`${out.length} flats done`) : toast.error("Some flats failed — see the list below");
+    setTimeout(() => document.getElementById("import-result")?.scrollIntoView({ behavior: "smooth" }), 50);
   }
-
-  const toggle = (id: string) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   return (
     <div className="max-w-6xl">
@@ -141,115 +167,90 @@ function ImportClients() {
       <Card>
         <label className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-navy/20 p-8 text-center hover:bg-navy/[0.03]">
           <FileSpreadsheet className="h-8 w-8 text-navy" />
-          <span className="font-semibold text-navy">{fileName || "Choose the client payment sheet (.xlsx)"}</span>
-          <span className="text-sm text-muted-foreground">The file is read in your browser. Client data is saved only to the database — nothing is uploaded anywhere else.</span>
+          <span className="font-semibold text-navy">{fileName || "Choose the Natec clients file (.xlsx)"}</span>
+          <span className="max-w-xl text-sm text-muted-foreground">Sheets: Clients · Schedule · Payments. New flats are added; existing flats are updated, and their schedule and payments are replaced by the file. Accounts and logins are never deleted. The file is read in your browser.</span>
           <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="sr-only" onChange={(e) => onFile(e.target.files?.[0])} />
           <span className={btnSm}><Upload className="h-3.5 w-3.5" /> Select file</span>
         </label>
       </Card>
 
-      {parsed && (
+      {entries && (
         <>
           <Card className="mt-6">
-            <h2 className="!text-xl text-navy">What the sheet contains</h2>
-            <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-              <div><dt className="text-muted-foreground">Project in sheet</dt><dd className="font-semibold">{parsed.projectName || "—"}</dd></div>
-              <div><dt className="text-muted-foreground">Clients found</dt><dd className="font-semibold">{parsed.clients.length}</dd></div>
-              <div><dt className="text-muted-foreground">Instalment plan</dt><dd className="font-semibold">{parsed.schedule.length} × (total {taka(parsed.schedule.reduce((s, x) => s + x.amount, 0))})</dd></div>
-              <div><dt className="text-muted-foreground">Flat sizes</dt><dd className="font-semibold">{parsed.units.map((u) => `${u.letter} ${u.size_sft}`).join(" · ") || "—"}</dd></div>
-            </dl>
-            {parsed.warnings.length > 0 && (
-              <ul className="mt-4 space-y-1 rounded-xl bg-amber-50 p-4 text-sm text-amber-900">
-                {parsed.warnings.map((w) => <li key={w} className="flex gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{w}</li>)}
-              </ul>
-            )}
-          </Card>
-
-          <Card className="mt-6">
-            <h2 className="!text-xl text-navy">Import settings</h2>
-            <div className="mt-4 grid gap-4 md:grid-cols-3">
+            <div className="flex flex-wrap items-end justify-between gap-4">
               <label className="text-sm font-medium text-navy">Project on the website
-                <select className="admin-input mt-1" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+                <select className="admin-input mt-1 min-w-64" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
                   <option value="">Choose…</option>
                   {(projects.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </label>
-              <label className="text-sm font-medium text-navy">Date for items the sheet has no date for
-                <input type="date" className="admin-input mt-1" value={undatedOn} onChange={(e) => setUndatedOn(e.target.value)} />
-                <span className="mt-1 block text-xs font-normal text-muted-foreground">Used for booking money, down payment and every payment's "paid on". Each one is noted as "date not in sheet" — edit later per client.</span>
-              </label>
-              <label className="text-sm font-medium text-navy">Payment method
-                <select className="admin-input mt-1" value={method} onChange={(e) => setMethod(e.target.value)}>
-                  {PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}
-                </select>
-              </label>
+              {projectId && <button onClick={backup} className={btnSm}><Download className="h-3.5 w-3.5" /> Download a backup of this project first</button>}
             </div>
-            <label className="mt-4 flex items-center gap-2 text-sm text-navy">
-              <input type="checkbox" checked={updateFacts} onChange={(e) => setUpdateFacts(e.target.checked)} />
-              Also update the project's flat sizes ({sizeRange(parsed.units) || "—"}), units per floor ({parsed.units.length}) and unit types A–{parsed.units.at(-1)?.letter ?? "?"}
-            </label>
+            {errors.length > 0 && <ul className="mt-4 space-y-1 rounded-xl bg-amber-50 p-4 text-sm text-amber-900">{errors.map((w) => <li key={w} className="flex gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{w}</li>)}</ul>}
           </Card>
 
           <Card className="mt-6 overflow-x-auto">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="!text-xl text-navy">Clients ({selected.size} selected)</h2>
-              <div className="flex gap-2">
-                <button className={btnSm} onClick={() => setSelected(new Set(parsed.clients.map((c) => c.flat_no)))}>Select all</button>
-                <button className={btnSm} onClick={() => setSelected(new Set())}>Select none</button>
-              </div>
-            </div>
-            <table className="w-full min-w-[1100px] text-sm">
-              <thead><tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="py-2"></th><th>Flat</th><th>Name</th><th>Phone</th><th className="text-right">Total</th><th className="text-right">Booking</th><th className="text-right">Down</th><th className="text-right">Paid</th><th className="text-right">Due</th><th>Notes</th>
-              </tr></thead>
+            <h2 className="mb-3 !text-xl text-navy">Flats in the file ({chosen.length} selected)</h2>
+            <table className="w-full min-w-[860px] text-sm">
+              <thead><tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground"><th className="py-2 pr-2" /><th>Flat</th><th>Client</th><th>Action</th><th>Schedule (file)</th><th>Payments (file)</th><th>Now on the website</th><th>Check</th></tr></thead>
               <tbody>
-                {rows.map(({ c, paid, due, exists }) => (
-                  <tr key={c.flat_no} className="border-b align-top last:border-0">
-                    <td className="py-2 pr-2"><input type="checkbox" disabled={exists} checked={!exists && selected.has(c.flat_no)} onChange={() => toggle(c.flat_no)} aria-label={`Import ${c.flat_no}`} /></td>
-                    <td className="font-semibold text-navy">{c.flat_no}<span className="block text-xs font-normal text-muted-foreground">{c.floor}{c.size_sft ? ` · ${c.size_sft} sft` : ""}</span></td>
-                    <td>{c.full_name}<span className="block text-xs text-muted-foreground">{c.address}</span></td>
-                    <td className="whitespace-nowrap">{c.phone || <span className="text-brand-red">missing</span>}</td>
-                    <td className="num whitespace-nowrap text-right">{taka(c.total_price)}</td>
-                    <td className="num whitespace-nowrap text-right">{taka(c.booking)}</td>
-                    <td className="num whitespace-nowrap text-right">{taka(c.down)}</td>
-                    <td className="num whitespace-nowrap text-right">{taka(paid)}</td>
-                    <td className="num whitespace-nowrap text-right font-semibold">{taka(due)}</td>
-                    <td className="max-w-[280px] text-xs">
-                      {exists && <span className="mb-1 inline-block rounded-full bg-navy/10 px-2 py-0.5 text-navy">Already in this project — skipped</span>}
-                      {c.issues.map((i) => <span key={i} className="block text-amber-800">• {i}</span>)}
-                    </td>
-                  </tr>
-                ))}
+                {entries.map((e) => {
+                  const cur = byFlat.get(e.flat);
+                  const inst = e.schedule?.rows.filter((r) => r.item === "Instalment") ?? [];
+                  const probs = problemsOf(e);
+                  const ok = ready(e);
+                  return (
+                    <tr key={e.flat} className="border-b align-top last:border-0">
+                      <td className="py-2 pr-2"><input type="checkbox" disabled={!ok} checked={ok && selected.has(e.flat)} onChange={() => toggle(e.flat)} aria-label={`Import ${e.flat}`} /></td>
+                      <td className="py-2 font-semibold text-navy">{e.flat}</td>
+                      <td className="py-2">{e.info.full_name ?? cur?.full_name ?? "—"}{e.info.phone ? <span className="block text-xs text-muted-foreground">{e.info.phone}</span> : null}</td>
+                      <td className="py-2">{!projectId ? "—" : cur ? "Update" : <span className="font-semibold text-green-700">New</span>}</td>
+                      <td className="py-2">{e.schedule ? <>{taka(e.schedule.total)}<span className="block text-xs text-muted-foreground">{inst.length} instalments{inst[0]?.due ? ` · ${fmtDate(inst[0].due)} → ${fmtDate(inst.at(-1)?.due ?? "")}` : ""}</span></> : <span className="text-muted-foreground">not in file (kept)</span>}</td>
+                      <td className="py-2">{e.payments.length} · {taka(e.payments.reduce((s, x) => s + x.amount, 0))}</td>
+                      <td className="py-2 text-xs text-muted-foreground">{cur ? <>Plan {taka(cur.instTotal)} ({cur.instCount} rows)<br />Paid {taka(cur.paidTotal)} ({cur.payCount} payments)</> : "—"}</td>
+                      <td className="py-2">{probs.length ? <ul className="text-xs text-amber-800">{probs.map((x) => <li key={x}>{x}</li>)}</ul> : ok ? <span className="text-green-700">Ready</span> : "—"}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
-          </Card>
 
-          <div className="sticky bottom-0 mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white p-4 shadow-lg">
-            <p className="text-sm text-navy">{toImport.length} clients will be imported{rows.some((r) => r.exists) ? ` · ${rows.filter((r) => r.exists).length} already exist and will be skipped` : ""}.</p>
-            <div className="flex items-center gap-3">
-              {busy && <span className="num text-sm text-muted-foreground">{progress}%</span>}
-              <button className="btn btn-primary !py-2" disabled={busy || !projectId || !toImport.length} onClick={runImport}>
-                {busy ? "Importing…" : `Import ${toImport.length} clients`}
-              </button>
+            {projectId && others.length > 0 && (
+              <label className="mt-5 flex items-start gap-2 rounded-xl bg-ivory p-4 text-sm text-navy">
+                <input type="checkbox" className="mt-1" checked={clearOthers} onChange={(e) => setClearOthers(e.target.checked)} />
+                <span>Also clear the {others.length} other clients in this project that are <b>not</b> in the file ({others.map((c) => c.flat_no).join(", ")}): remove their schedule and payments and set their total to ৳0. Their accounts and logins stay.</span>
+              </label>
+            )}
+            <div className="mt-5 flex justify-end">
+              <button disabled={busy || (!chosen.length && !(clearOthers && others.length))} onClick={() => setConfirm(true)} className="btn btn-primary !py-2 disabled:opacity-50">{busy ? "Working…" : "Import / update"}</button>
             </div>
-          </div>
-
-          {results.length > 0 && (
-            <Card className="mt-6">
-              <h2 id="import-result" className="!text-xl text-navy">Result</h2>
-              <ul className="mt-3 space-y-1 text-sm">
-                {results.map((r) => (
-                  <li key={r.flat} className={`flex gap-2 ${r.ok ? "text-navy" : "text-brand-red"}`}>
-                    {r.ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />}
-                    <span className="font-semibold">{r.flat}</span> {r.message}
-                  </li>
-                ))}
-              </ul>
-              <Link to="/admin/accounts" search={{ tab: "clients" }} className="btn btn-primary mt-4 !py-2">Go to client accounts</Link>
-            </Card>
-          )}
+          </Card>
         </>
       )}
+
+      {results.length > 0 && (
+        <Card className="mt-6"><div id="import-result" />
+          <h2 className="!text-xl text-navy">Result</h2>
+          <ul className="mt-3 space-y-1 text-sm">
+            {results.map((r) => <li key={r.flat} className={`flex gap-2 ${r.ok ? "text-navy" : "text-brand-red"}`}>{r.ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-700" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />}<span><b>{r.flat}</b> — {r.message}</span></li>)}
+          </ul>
+        </Card>
+      )}
+
+      <Dialog open={confirm} onOpenChange={setConfirm}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Replace client data?</DialogTitle></DialogHeader>
+          <div className="space-y-2 text-sm text-muted-foreground">
+            {chosen.length > 0 && <p><b className="text-navy">{chosen.length} flats</b> ({chosen.map((e) => e.flat).join(", ")}) will be created or updated. Their current schedule and payments are replaced by the file.</p>}
+            {clearOthers && others.length > 0 && <p><b className="text-brand-red">{others.length} other clients</b> ({others.map((c) => c.flat_no).join(", ")}) will have their schedule and payments removed.</p>}
+            <p>This cannot be undone. Download the backup first if you may need the old numbers.</p>
+          </div>
+          <div className="mt-4 flex justify-end gap-2">
+            <button onClick={() => setConfirm(false)} className={btnSm}>Cancel</button>
+            <button onClick={run} className="btn btn-primary !py-2">Yes, replace</button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
