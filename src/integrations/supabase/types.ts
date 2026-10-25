@@ -863,6 +863,7 @@ export type Database = {
           client_id: string | null
           last_payment_amount: number | null
           last_payment_on: string | null
+          late_fee_paid: number | null
           next_due_amount: number | null
           next_due_date: string | null
           overdue_amount: number | null
