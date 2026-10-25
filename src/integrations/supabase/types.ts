@@ -869,7 +869,6 @@ export type Database = {
           pct_paid: number | null
           total_paid: number | null
           total_price: number | null
-          late_fee_paid: number | null
         }
         Relationships: []
       }
