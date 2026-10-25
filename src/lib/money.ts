@@ -111,7 +111,16 @@ export function computePlan(p: PlanForm, bookingDate: string): PlanResult {
   return { remainingAfterBooking: rem, down, each, last, rows, errors };
 }
 
-const isExtra = (l: string) => l === "Booking money" || l === "Down payment";
+/** Booking money and down payment: paid up front, shown first and without a due date. */
+export const isExtra = (l: string) => l === "Booking money" || l === "Down payment";
+const EXTRA_ORDER: Record<string, number> = { "Booking money": 0, "Down payment": 1 };
+/** Schedule display order: booking money, down payment, then everything else by due date. */
+export function scheduleOrder<T extends { label: string; due_date: string }>(rows: readonly T[]): T[] {
+  return [...rows].sort((a, b) => {
+    const ea = EXTRA_ORDER[a.label] ?? 9, eb = EXTRA_ORDER[b.label] ?? 9;
+    return ea !== eb ? ea - eb : a.due_date.localeCompare(b.due_date);
+  });
+}
 
 /**
  * "Regenerate schedule" for an existing client: paid / partly-paid rows are kept as they are,

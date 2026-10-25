@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { WhatsAppIcon } from "@/components/SiteChrome";
 import { PaymentsTable, StatusChip, SummaryCards } from "@/components/ClientMoney";
 import { PAYMENT_METHODS, PAYMENT_TYPES, fmtDate, printStatement, type ClientRow, type PaymentRow } from "@/lib/account";
-import { allocatePayment, taka, type PlanForm } from "@/lib/money";
+import { allocatePayment, isExtra, scheduleOrder, taka, type PlanForm } from "@/lib/money";
 import { PaymentPlanForm, initialPlanState, planBlocker, type PlanState } from "@/components/admin/PaymentPlanForm";
 import { inviteClient } from "@/lib/admin-accounts.functions";
 import { DeleteLoginsDialog, type LoginTarget } from "@/components/admin/PortalLogins";
@@ -227,9 +227,11 @@ function Schedule({ clientId, rows, total, bookingDate, onChange }: { clientId: 
       </div>
       {!rows.length ? <p className="text-muted-foreground">No schedule yet.</p> : (
         <ul className="space-y-2">
-          {rows.map((r) => (
+          {scheduleOrder(rows).map((r) => (
             <li key={r.id} className="grid items-center gap-2 sm:grid-cols-[150px_1fr_150px_120px_auto_auto]">
-              <input type="date" defaultValue={r.due_date} aria-label="Due date" onBlur={(e) => e.target.value && e.target.value !== r.due_date && upd(r.id, { due_date: e.target.value })} className="admin-input" />
+              {isExtra(r.label)
+                ? <span className="px-3 text-sm text-muted-foreground">Up front</span>
+                : <input type="date" defaultValue={r.due_date} aria-label="Due date" onBlur={(e) => e.target.value && e.target.value !== r.due_date && upd(r.id, { due_date: e.target.value })} className="admin-input" />}
               <input defaultValue={r.label} aria-label="Label" onBlur={(e) => e.target.value !== r.label && upd(r.id, { label: e.target.value })} className="admin-input" />
               <input type="number" min={0} defaultValue={Number(r.amount)} aria-label="Amount" onBlur={(e) => Number(e.target.value) !== Number(r.amount) && upd(r.id, { amount: Number(e.target.value) })} className="admin-input" />
               <span className="text-xs text-muted-foreground">{taka(r.paid_amount)} paid</span>

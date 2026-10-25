@@ -1,6 +1,6 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { fmtDate, type BalanceRow, type ClientRow, type InstalmentRow, type PaymentRow } from "@/lib/account";
-import { taka } from "@/lib/money";
+import { isExtra, scheduleOrder, taka } from "@/lib/money";
 
 export function PaidRing({ pct }: { pct: number }) {
   const reduce = useReducedMotion();
@@ -48,9 +48,9 @@ export function ScheduleTable({ rows }: { rows: InstalmentRow[] }) {
   if (!rows.length) return <p className="text-muted-foreground">No instalment schedule yet.</p>;
   return (
     <ul className="divide-y divide-border">
-      {rows.map((i) => (
+      {scheduleOrder(rows.map((r) => ({ ...r, label: r.label ?? "", due_date: r.due_date ?? "" }))).map((i) => (
         <li key={i.id} className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 py-3 md:grid-cols-[130px_1fr_160px_110px] md:items-center">
-          <span className="text-sm text-muted-foreground md:order-none">{fmtDate(i.due_date)}</span>
+          <span className="text-sm text-muted-foreground md:order-none">{isExtra(i.label) ? "Up front" : fmtDate(i.due_date)}</span>
           <span className="justify-self-end md:hidden"><StatusChip s={i.status ?? ""} /></span>
           <span className="text-navy">{i.label}</span>
           <span className="justify-self-end font-semibold text-navy md:justify-self-start">{taka(i.amount)}{Number(i.paid_amount) > 0 && Number(i.paid_amount) < Number(i.amount) ? <span className="block text-xs font-normal text-muted-foreground">{taka(i.paid_amount)} paid</span> : null}</span>

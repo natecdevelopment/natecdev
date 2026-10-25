@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, Pencil, Plus, Search, UserCheck, UserX, Eye, Trash2, MoreHorizontal, Briefcase, FileSpreadsheet, KeyRound } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, Pencil, Plus, Search, UserCheck, UserX, Eye, Trash2, MoreHorizontal, Briefcase, FileSpreadsheet, KeyRound } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ActivityList, ADMIN_LOCK_TIP, DeleteAccountDialog, IconBtn, StatusChip, logAudit, muted, useAdminEmails, type DeleteTarget } from "@/components/admin/AccountAdmin";
 import { supabase } from "@/integrations/supabase/client";
@@ -27,6 +27,7 @@ function AccountsPage() {
         <Link to="/admin/accounts" search={{}} className={`${btnSm} ${tab === "general" ? "!bg-navy !text-white" : ""}`}>General accounts</Link>
         <Link to="/admin/accounts" search={{ tab: "clients" }} className={`${btnSm} ${tab === "clients" ? "!bg-navy !text-white" : ""}`}>Client accounts</Link>
         <Link to="/admin/accounts/import" className={btnSm}><FileSpreadsheet className="h-3.5 w-3.5" /> Import from Excel</Link>
+        <Link to="/admin/accounts/schedules" className={btnSm}><CalendarClock className="h-3.5 w-3.5" /> Schedules from agreements</Link>
         <Link to="/admin/accounts/create-logins" className={btnSm}><KeyRound className="h-3.5 w-3.5" /> Create logins</Link>
         <Link to="/admin/accounts/new" search={{}} className="btn btn-primary !py-2"><Plus className="h-4 w-4" /> Add client</Link>
       </PageTitle>

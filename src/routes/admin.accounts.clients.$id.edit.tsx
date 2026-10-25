@@ -12,7 +12,7 @@ import { ADMIN_LOCK_TIP, DeleteAccountDialog, useAdminEmails, type DeleteTarget 
 import { normalizeBdPhone } from "@/components/InquiryForm";
 import { inviteClient, updateLoginEmail } from "@/lib/admin-accounts.functions";
 import { PAYMENT_METHODS, PAYMENT_TYPES, fmtDate, type ClientRow, type PaymentRow } from "@/lib/account";
-import { guessPlan, rebuildKeepingPaid, taka, type ScheduleRow } from "@/lib/money";
+import { guessPlan, rebuildKeepingPaid, scheduleOrder, taka, type ScheduleRow } from "@/lib/money";
 
 export const Route = createFileRoute("/admin/accounts/clients/$id/edit")({
   head: () => ({ meta: [{ title: "Edit client — Natec Admin" }, { name: "robots", content: "noindex" }] }),
@@ -90,7 +90,7 @@ function ClientEditor() {
   useEffect(() => {
     if (!q.data || f) return;
     const { c, inst } = q.data;
-    const rows: ScheduleRow[] = inst.map((r) => ({ id: r.id, due_date: r.due_date, amount: Number(r.amount), label: r.label, paid: Number(r.paid_amount) }));
+    const rows: ScheduleRow[] = scheduleOrder(inst.map((r) => ({ id: r.id, due_date: r.due_date, amount: Number(r.amount), label: r.label, paid: Number(r.paid_amount) })));
     const form: Form = {
       info: { full_name: c.full_name, phone: c.phone, email: c.email, address: c.address, status: c.status, profile_id: c.profile_id ?? "" },
       home: { project_id: c.project_id ?? "", flat_no: c.flat_no, floor: c.floor, size_sft: c.size_sft == null ? "" : String(c.size_sft), parking: c.parking, booking_date: c.booking_date ?? "", agreement_date: c.agreement_date ?? "" },

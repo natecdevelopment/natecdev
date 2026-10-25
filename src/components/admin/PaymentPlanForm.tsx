@@ -3,7 +3,7 @@ import { CheckCircle2, Lock, Plus, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { btnDanger, btnSm } from "@/components/admin/ui";
 import { fmtDate } from "@/lib/account";
-import { addDays, computePlan, taka, type PlanForm, type ScheduleRow } from "@/lib/money";
+import { addDays, computePlan, isExtra, taka, type PlanForm, type ScheduleRow } from "@/lib/money";
 
 export type PlanState = { plan: PlanForm; rows: ScheduleRow[]; dirty: boolean };
 
@@ -49,7 +49,7 @@ export function PaymentPlanForm({ value, onChange, bookingDate, build }: { value
   const remaining = plan.total - planTotal;
   const balanced = Math.abs(remaining) <= 0.5;
   const instRows = rows.filter((r) => r.label !== "Booking money" && r.label !== "Down payment");
-  const ends = rows.reduce((m, r) => (r.due_date > m ? r.due_date : m), "");
+  const ends = instRows.reduce((m, r) => (r.due_date > m ? r.due_date : m), "");
   const lastAmt = instRows.at(-1)?.amount ?? 0;
   const e = calc.errors;
   const input = "admin-input mt-1";
@@ -111,11 +111,13 @@ export function PaymentPlanForm({ value, onChange, bookingDate, build }: { value
           </div>
           {!rows.length ? <p className="text-sm text-muted-foreground">Fill in the fields above to build the schedule.</p> : (
             <ul className="space-y-2">
-              {rows.map((r, i) => {
+              {rows.map((r, i) => ({ r, i })).sort((a, b) => Number(!isExtra(a.r.label)) - Number(!isExtra(b.r.label))).map(({ r, i }) => {
                 const paid = r.paid ?? 0, lock = paid > 0;
                 return (
                 <li key={r.id ?? `n${i}`} className={`grid grid-cols-[1fr_auto] gap-2 rounded-lg border border-border p-2 sm:grid-cols-[150px_1fr_140px_auto] sm:border-0 sm:p-0 ${lock ? "sm:bg-ivory/60" : ""}`}>
-                  <input type="date" value={r.due_date} disabled={lock} aria-label={`${r.label} due date`} onChange={(ev) => setRow(i, { due_date: ev.target.value })} className="admin-input col-span-2 disabled:opacity-70 sm:col-span-1" />
+                  {isExtra(r.label)
+                    ? <span className="col-span-2 flex items-center px-3 text-sm text-muted-foreground sm:col-span-1">Up front · no date</span>
+                    : <input type="date" value={r.due_date} disabled={lock} aria-label={`${r.label} due date`} onChange={(ev) => setRow(i, { due_date: ev.target.value })} className="admin-input col-span-2 disabled:opacity-70 sm:col-span-1" />}
                   <input value={r.label} aria-label="Label" onChange={(ev) => setRow(i, { label: ev.target.value })} className="admin-input col-span-2 sm:col-span-1" />
                   <div>
                     <input inputMode="numeric" value={String(r.amount)} aria-label={`${r.label} amount`} aria-invalid={r.amount < paid} onChange={(ev) => setRow(i, { amount: num(ev.target.value) })} className="admin-input" />
