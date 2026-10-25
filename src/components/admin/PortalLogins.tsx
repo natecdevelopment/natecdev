@@ -41,7 +41,7 @@ export function ResetPortalPassword({ clientId, name, phone, flat }: { clientId:
   }
   return (
     <>
-      <Confirm title="Reset portal password?" description={`${name} gets a new temporary password and must set their own at next login. The old password stops working.`} confirmLabel="Reset password" onConfirm={go}>
+      <Confirm title="Reset portal password?" description={`${name} gets a new temporary password they can log in with; their dashboard then suggests setting their own. The old password stops working.`} confirmLabel="Reset password" onConfirm={go}>
         {(ask) => <button onClick={ask} className={btnSm}><KeyRound className="h-4 w-4" /> Reset portal password</button>}
       </Confirm>
       <Dialog open={!!res} onOpenChange={(o) => { if (!o) setRes(null); }}>

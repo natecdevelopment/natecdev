@@ -196,7 +196,7 @@ function CreateLogins() {
       <div className="space-y-4">
         <button onClick={() => !progress && setMode("list")} className="inline-flex items-center gap-1 text-sm text-navy"><ArrowLeft className="h-4 w-4" /> Back to list</button>
         <PageTitle title={mode === "reset" ? `Reset ${ids.length} login${ids.length === 1 ? "" : "s"}` : `Create ${ids.length} login${ids.length === 1 ? "" : "s"}`} />
-        <p className="text-sm text-muted-foreground">{mode === "reset" ? "Each client keeps their account, flat, payments and history. They get a new temporary password, are signed out everywhere, and must set their own password at next sign-in." : "Each gets a username and a temporary password; they must set their own password at first sign-in."}</p>
+        <p className="text-sm text-muted-foreground">{mode === "reset" ? "Each client keeps their account, flat, payments and history. They get a new temporary password and are signed out everywhere. They can log in with it straight away; the dashboard suggests setting their own." : "Each gets a username and a temporary password they can log in with straight away; the dashboard suggests setting their own."}</p>
         <Card className="!p-0">
           <div className="hidden overflow-x-auto md:block" data-lenis-prevent>
             <table className="w-full min-w-[720px] text-sm">
@@ -211,7 +211,7 @@ function CreateLogins() {
           {shared && (
             <div className="mt-3 space-y-2">
               <input value={sharedPw} onChange={(e) => setSharedPw(e.target.value)} placeholder="At least 8 characters" aria-label="Password for all" className="admin-input max-w-xs font-mono" />
-              <p className="flex items-start gap-2 text-sm text-brand-red"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />Anyone who knows another client's phone number could open their account. Use only if every client changes it at first login.</p>
+              <p className="flex items-start gap-2 text-sm text-brand-red"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />Anyone who knows another client's phone number could open their account. Ask clients to set their own password after logging in.</p>
             </div>
           )}
         </Card>

@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
-import { BadgeCheck, Building2, Download, FileText, Heart, Home, LayoutDashboard, LifeBuoy, LogOut, Phone, Settings, Wallet } from "lucide-react";
+import { BadgeCheck, Building2, Download, FileText, Heart, Home, KeyRound, LayoutDashboard, LifeBuoy, LogOut, Phone, Settings, Wallet, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { WhatsAppIcon } from "@/components/SiteChrome";
 import { ProjectCard } from "@/components/ProjectCard";
@@ -13,6 +13,7 @@ import { fmtDate, initials, printStatement, type BalanceRow, type ClientRow, typ
 import { taka } from "@/lib/money";
 import { PaidRing, PaymentsTable, ScheduleTable, SummaryCards } from "@/components/ClientMoney";
 import { company } from "@/lib/site";
+import { setFirstPassword } from "@/lib/login.functions";
 
 const TABS = ["overview", "home", "payments", "documents", "saved", "support", "profile"] as const;
 type Tab = (typeof TABS)[number];
@@ -69,8 +70,6 @@ function AccountPage() {
   const verified = !!user.email_confirmed_at;
 
   useEffect(() => { supabase.from("profiles").update({ last_seen_at: new Date().toISOString() }).eq("id", user.id).then(() => {}); }, [user.id]);
-  // First login: the "Set your own password" screen comes before anything else.
-  useEffect(() => { if (profile.data?.must_change_password) navigate({ to: "/login", replace: true }); }, [profile.data?.must_change_password, navigate]);
 
   async function logout() {
     await qc.cancelQueries(); qc.clear();
@@ -117,6 +116,7 @@ function AccountPage() {
         </aside>
 
         <main className="min-w-0">
+          {p?.must_change_password && <SetPasswordBanner onSaved={() => qc.invalidateQueries({ queryKey: ["me"] })} />}
           {client.data?.client.is_demo && <p role="status" className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900">This is a demo account. Figures are examples only.</p>}
           {profile.isLoading ? <div className="h-64 animate-pulse rounded-2xl bg-white" /> : p?.status === "suspended" ? (
             <div className="rounded-2xl bg-white p-8 text-center shadow-sm"><h1 className="!text-3xl text-navy">Account suspended</h1><p className="mt-3 text-muted-foreground">Your account is currently suspended. Please contact Natec for help.</p><a href={company.whatsappLink} target="_blank" rel="noreferrer" className="btn btn-primary mt-6"><WhatsAppIcon /> WhatsApp us</a></div>
@@ -376,6 +376,54 @@ function Documents({ docs }: { docs: DocRow[] }) {
             </li>
           ))}
         </ul>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Shown while the client still uses the temporary password from the office. They can log in and use
+ * everything with it; this just invites them to choose their own. "Later" hides it until the next visit.
+ */
+function SetPasswordBanner({ onSaved }: { onSaved: () => void }) {
+  const [hidden, setHidden] = useState(() => { try { return sessionStorage.getItem("natec-pw-later") === "1"; } catch { return false; } });
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  if (hidden) return null;
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    const password = String(f.get("password") || ""), confirm = String(f.get("confirm") || "");
+    if (password.length < 8) return setErr("Use at least 8 characters.");
+    if (confirm !== password) return setErr("Passwords don't match.");
+    setBusy(true); setErr("");
+    const r = await setFirstPassword({ data: { password } }).catch(() => ({ error: "Couldn't save your password. Please try again." }));
+    setBusy(false);
+    if ("error" in r) return setErr(r.error);
+    if (r.access_token) await supabase.auth.setSession({ access_token: r.access_token, refresh_token: r.refresh_token });
+    toast.success("Your new password is saved");
+    onSaved();
+  }
+  const later = () => { try { sessionStorage.setItem("natec-pw-later", "1"); } catch { /* ignore */ } setHidden(true); };
+  return (
+    <div role="status" className="mb-5 rounded-2xl border border-brand-red/20 bg-white p-4 shadow-sm md:p-5">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-red/10 text-brand-red"><KeyRound className="h-5 w-5" /></span>
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-navy">Set a new password</p>
+          <p className="text-sm text-muted-foreground">You are using the password from our office. Choose your own to keep your account safe.</p>
+        </div>
+        {!open && <button onClick={() => setOpen(true)} className="btn btn-primary !py-2">Set new password</button>}
+        <button onClick={later} className="rounded-full p-2 text-navy/60 hover:bg-ivory hover:text-navy" aria-label="Remind me later"><X className="h-4 w-4" /></button>
+      </div>
+      {open && (
+        <form onSubmit={submit} noValidate className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+          <label className="text-sm font-medium text-navy">New password<input name="password" type="password" autoComplete="new-password" className="admin-input mt-1" /></label>
+          <label className="text-sm font-medium text-navy">Confirm new password<input name="confirm" type="password" autoComplete="new-password" className="admin-input mt-1" /></label>
+          <button disabled={busy} className="btn btn-primary !py-2.5 disabled:opacity-50">{busy ? "Saving…" : "Save"}</button>
+          {err && <p role="alert" className="text-sm font-medium text-brand-red sm:col-span-3">{err}</p>}
+        </form>
       )}
     </div>
   );

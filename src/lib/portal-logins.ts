@@ -66,14 +66,14 @@ Natec Development-এর ক্লায়েন্ট পোর্টালে
 ওয়েবসাইট: ${PORTAL_LOGIN_URL}
 ইউজার আইডি: ${o.username}
 পাসওয়ার্ড: ${o.password}
-প্রথমবার লগইন করে নিজের পাসওয়ার্ড সেট করুন। এখানে আপনার ফ্ল্যাট ${o.flat || "—"}, কিস্তির তালিকা ও পেমেন্টের হিসাব দেখতে পাবেন।
+এই ইউজার আইডি ও পাসওয়ার্ড দিয়ে সরাসরি লগইন করুন। এখানে আপনার ফ্ল্যাট ${o.flat || "—"}, কিস্তির তালিকা ও পেমেন্টের হিসাব দেখতে পাবেন। চাইলে লগইনের পর নিজের পাসওয়ার্ড বদলে নিতে পারবেন।
 
 Assalamu Alaikum ${o.name},
 Your Natec Development client portal account is ready.
 Website: ${PORTAL_LOGIN_URL}
 User ID: ${o.username}
 Password: ${o.password}
-Please log in and set your own password. You can see your flat ${o.flat || "—"}, instalment schedule and payments there.
+Log in with this user ID and password to see your flat ${o.flat || "—"}, instalment schedule and payments. You can change the password after logging in if you like.
 — Natec Development Ltd.`;
 }
 

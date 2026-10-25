@@ -9,7 +9,6 @@ import { normalizeBdPhone } from "@/components/InquiryForm";
 import { passwordScore } from "@/lib/money";
 import { safeNext } from "@/lib/account";
 import { signInAny } from "@/lib/login-client";
-import { setFirstPassword } from "@/lib/login.functions";
 import { suggestUsername, USERNAME_RE } from "@/lib/login-id";
 import { EASE, Field, SubmitButton, type SubmitState } from "./AuthFields";
 
@@ -36,20 +35,15 @@ export function AuthScreen({ mode, next }: { mode: Mode; next?: string | undefin
   const [leaving, setLeaving] = useState(false);
   const navigate = useNavigate();
   const target = safeNext(next);
-  const [mustChange, setMustChange] = useState(false);
-
-  async function needsNewPassword() {
+  // A temporary password works as a normal login; the dashboard then suggests setting a new one.
+  async function signedIn() {
     const { data } = await supabase.auth.getUser();
-    if (!data.user) return null;
-    const { data: p } = await supabase.from("profiles").select("must_change_password").eq("id", data.user.id).maybeSingle();
-    return !!p?.must_change_password;
+    return !!data.user;
   }
 
   useEffect(() => {
-    const go = () => needsNewPassword().then((must) => {
-      if (must === null) return;
-      if (must) return setMustChange(true);
-      navigate({ to: target as "/account", replace: true });
+    const go = () => signedIn().then((yes) => {
+      if (yes) navigate({ to: target as "/account", replace: true });
     });
     go();
     const { data: sub } = supabase.auth.onAuthStateChange((e) => { if (e === "SIGNED_IN") go(); });
@@ -64,14 +58,12 @@ export function AuthScreen({ mode, next }: { mode: Mode; next?: string | undefin
       const { data } = await supabase.auth.getUser();
       if (data.user) await supabase.from("saved_projects").upsert({ user_id: data.user.id, project_id: pending });
     }
-    if (await needsNewPassword()) return setMustChange(true);
     setLeaving(true);
     setTimeout(() => navigate({ to: target as "/account" }), reduce ? 150 : 450);
   }
 
   const dur = reduce ? 0.15 : 0.7;
-  const form = mustChange ? <SetPasswordForm key="setpw" onDone={() => { setMustChange(false); setLeaving(true); setTimeout(() => navigate({ to: target as "/account" }), reduce ? 150 : 450); }} />
-    : mode === "login" ? <LoginForm key="login" onDone={finish} next={next} /> : <RegisterForm key="register" next={next} />;
+  const form = mode === "login" ? <LoginForm key="login" onDone={finish} next={next} /> : <RegisterForm key="register" next={next} />;
 
   return (
     <section className="relative bg-ivory pb-14 pt-6 lg:min-h-[calc(100svh-72px)]">
@@ -296,46 +288,3 @@ function RegisterForm({ next }: { next?: string | undefined }) {
   );
 }
 
-function SetPasswordForm({ onDone }: { onDone: () => void }) {
-  const [errs, setErrs] = useState<Record<string, string>>({});
-  const [shake, setShake] = useState(0);
-  const [state, setState] = useState<SubmitState>("idle");
-  const [pw, setPw] = useState("");
-  const score = passwordScore(pw);
-  async function submit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const f = new FormData(e.currentTarget);
-    const password = String(f.get("password") || ""), confirm = String(f.get("confirm") || "");
-    const er: Record<string, string> = {};
-    if (password.length < 8) er["password"] = "Use at least 8 characters.";
-    if (confirm !== password) er["confirm"] = "Passwords don't match.";
-    setErrs(er); setShake((s) => s + 1);
-    if (Object.keys(er).length) return;
-    setState("loading");
-    const r = await setFirstPassword({ data: { password } }).catch(() => ({ error: "Couldn't save your password. Please try again." }));
-    if ("error" in r) { setState("idle"); setErrs({ password: r.error }); return; }
-    if (r.access_token) await supabase.auth.setSession({ access_token: r.access_token, refresh_token: r.refresh_token });
-    setState("success");
-    setTimeout(onDone, 650);
-  }
-  const meter = ["Too short", "Weak", "Fair", "Good", "Strong"][score];
-  return (
-    <motion.form onSubmit={submit} noValidate>
-      <Stagger>
-        {[
-          <div key="h"><p className="eyebrow text-brand-red">First login</p><h1 className="mt-2 !text-4xl text-navy">Set your own password</h1><p className="mt-2 text-muted-foreground">Choose a new password to keep your account safe.</p></div>,
-          <Field key="p" label="New password" name="password" password autoComplete="new-password" error={errs["password"]} shakeKey={shake} onChange={setPw}>
-            {pw && (
-              <div className="mt-2 flex items-center gap-3" aria-live="polite">
-                <div className="flex flex-1 gap-1">{[0, 1, 2, 3].map((i) => <span key={i} className={`h-1 flex-1 rounded-full transition-colors ${i < score ? (score >= 3 ? "bg-navy" : "bg-brand-red") : "bg-navy/10"}`} />)}</div>
-                <span className="text-xs text-muted-foreground">{meter}</span>
-              </div>
-            )}
-          </Field>,
-          <Field key="c" label="Confirm new password" name="confirm" password autoComplete="new-password" error={errs["confirm"]} shakeKey={shake} />,
-          <SubmitButton key="s" state={state}>Save and continue →</SubmitButton>,
-        ]}
-      </Stagger>
-    </motion.form>
-  );
-}
