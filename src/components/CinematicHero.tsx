@@ -59,324 +59,108 @@ export function CinematicHero() {
   return reduced ? <StaticHero /> : <FlyHero />;
 }
 
-// Auto-play: on load the film plays itself to the last frame unless the visitor takes over.
-const AUTOPLAY_SECONDS = { d: 24, m: 22 }; // time for the whole hero at full speed
-const AUTOPLAY_DELAY_MS = 1200; // let the drifting clouds breathe first
-const RAMP_SECONDS = 1.4; // ease in at the start
-const CLOUD_FADE_FRAMES = 14; // drifting clouds fade out over the first story frames
-// The picture follows the scroll position through a soft spring (higher = snappier), and
-// neighbouring frames are cross-faded, so it glides instead of stepping from image to image.
-const FOLLOW_RATE = 9;
+/** Background film (looped, muted): VP9 WebM first (smaller), H.264 MP4 for Safari. The chapter text follows its playback position. */
+export const HERO_VIDEO = {
+  d: { webm: "/hero-natec/video/natec-hero-1080p.webm", mp4: "/hero-natec/video/natec-hero-1080p.mp4", poster: "/hero-natec/video/poster-d.webp" },
+  m: { webm: "/hero-natec/video/natec-hero-mobile.webm", mp4: "/hero-natec/video/natec-hero-mobile.mp4", poster: "/hero-natec/video/poster-m.webp" },
+} as const;
+const CLOUD_FADE_FRAMES = 14; // drifting clouds fade out over the first story frames of each loop
 
 function FlyHero() {
-  const sectionRef = useRef<HTMLElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const brightRef = useRef<HTMLDivElement>(null);
-  const hintRef = useRef<HTMLDivElement>(null);
   const cloudsRef = useRef<HTMLDivElement>(null);
   const [chapter, setChapter] = useState(0);
-  const [autoplaying, setAutoplaying] = useState(false);
+  const [dir, setDir] = useState<"d" | "m" | null>(null);
+
+  // Pick the portrait (phone) or landscape film after mount, so the server render is the same for everyone.
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px) and (orientation: portrait)");
+    const pick = () => setDir(mq.matches ? "m" : "d");
+    pick();
+    mq.addEventListener("change", pick);
+    return () => mq.removeEventListener("change", pick);
+  }, []);
 
   useEffect(() => {
-    const dir = window.matchMedia("(max-width: 767px)").matches ? "m" : "d";
-    // Compressed frames are kept as blobs (≈100 KB each). Only a small window around the
-    // playhead is decoded, already scaled to the canvas, so memory stays low (200 full-HD
-    // bitmaps would be ~1.6 GB and make phones stutter) and each draw is a cheap 1:1 copy.
-    const blobs: (Blob | undefined)[] = new Array(FRAMES + 1);
-    const bitmaps = new Map<number, ImageBitmap>();
-    const decoding = new Set<number>();
-    let decodeGen = 0; // bumped on resize so stale decodes are dropped
-    const SRC = dir === "m" ? { w: 1080, h: 1920 } : { w: 1920, h: 1080 };
-    const KEEP_BEHIND = 8, KEEP_AHEAD = 24, MAX_DECODES = 3;
-    let alive = true, raf = 0, lastDrawn = -1, lastChapter = 0, lastBright = false, dirty = true;
-    let lastCloud = -1, playhead = 0, drawnAt = -1, lastTick = 0;
-    let lenis: {
-      raf: (t: number) => void;
-      destroy: () => void;
-      scroll: number;
-      scrollTo: (target: number, opts?: { immediate?: boolean; force?: boolean }) => void;
-    } | null = null;
-
-    // ---- auto-play state ----
-    // "idle" until conditions are met, "playing" while it runs, "done" once finished or stopped.
-    let auto: "idle" | "playing" | "done" = "idle";
-    let autoY = 0, autoStart = 0, lastT = 0, peek = -1, peekFinal = false, speed = 0;
-    // How far past the hero to stop: the next section's top padding plus ~1.5 lines of its
-    // heading (≈1–2 lines visible on phones and desktops). Its fade-in is triggered too,
-    // because a sliver this small is below the reveal threshold.
-    const peekPx = (hero: HTMLElement) => {
-      const next = hero.nextElementSibling as HTMLElement | null;
-      if (!next) return 0;
-      const vh = window.innerHeight;
-      const head = next.querySelector<HTMLElement>("h1, h2, h3, p");
-      let px = Math.min(vh * 0.15, 120);
-      if (head) {
-        const cs = getComputedStyle(head);
-        const lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.15 || 40;
-        px = head.getBoundingClientRect().top - next.getBoundingClientRect().top + lh * 1.6;
-      }
-      next.querySelector(".reveal")?.setAttribute("data-in", "");
-      return Math.round(Math.max(60, Math.min(px, vh * 0.38)));
-    };
-    const startedAt = performance.now();
-    const conn = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
-    if (window.location.hash || window.scrollY > 10 || conn?.saveData) auto = "done";
-    const stopAuto = () => {
-      if (auto === "done") return;
-      auto = "done";
-      if (alive) setAutoplaying(false);
-      removeStopListeners();
-    };
-    const onKey = (e: KeyboardEvent) => { if (!e.metaKey && !e.ctrlKey) stopAuto(); };
-    const stopEvents = ["wheel", "touchstart", "pointerdown", "mousedown"] as const;
-    stopEvents.forEach((ev) => window.addEventListener(ev, stopAuto, { passive: true }));
-    window.addEventListener("keydown", onKey);
-    function removeStopListeners() {
-      stopEvents.forEach((ev) => window.removeEventListener(ev, stopAuto));
-      window.removeEventListener("keydown", onKey);
-    }
-    // highest frame such that every frame up to it is downloaded (auto-play never outruns loading)
-    let contiguous = 0;
-    const loadedUpTo = () => {
-      while (contiguous < FRAMES && blobs[contiguous + 1]) contiguous++;
-      return contiguous;
-    };
-    const canvas = canvasRef.current!;
-    const ctx = canvas.getContext("2d", { alpha: false })!;
-
-    const sizeCanvas = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      canvas.width = Math.round(canvas.clientWidth * dpr);
-      canvas.height = Math.round(canvas.clientHeight * dpr);
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-      // Decoded frames were scaled for the old size: drop them and decode again.
-      decodeGen++;
-      bitmaps.forEach((b) => b.close());
-      bitmaps.clear();
-      decoding.clear();
-      dirty = true;
-    };
-    sizeCanvas();
-
-    // "cover" size of a frame on this canvas
-    const coverSize = () => {
-      const s = Math.max(canvas.width / SRC.w, canvas.height / SRC.h);
-      return { w: Math.max(1, Math.round(SRC.w * s)), h: Math.max(1, Math.round(SRC.h * s)) };
-    };
-    const nearest = (i: number) => {
-      for (let d = 0; d < FRAMES; d++) {
-        if (i - d >= 1 && bitmaps.has(i - d)) return i - d;
-        if (i + d <= FRAMES && bitmaps.has(i + d)) return i + d;
-      }
-      return -1;
-    };
-    const paint = (b: ImageBitmap, alpha = 1) => {
-      const { w, h } = coverSize();
-      // Pre-scaled frames are copied 1:1; unscaled ones (old browsers) are scaled here.
-      ctx.globalAlpha = alpha;
-      ctx.drawImage(b, Math.round((canvas.width - w) / 2), Math.round((canvas.height - h) / 2), w, h);
-      ctx.globalAlpha = 1;
-    };
-    const decode = async (i: number) => {
-      const blob = blobs[i];
-      if (!blob || bitmaps.has(i) || decoding.has(i)) return;
-      decoding.add(i);
-      const gen = decodeGen;
-      const { w, h } = coverSize();
-      try {
-        let bmp: ImageBitmap;
-        try { bmp = await createImageBitmap(blob, { resizeWidth: w, resizeHeight: h, resizeQuality: "high" }); }
-        catch { bmp = await createImageBitmap(blob); } // very old browsers: no resize options
-        if (!alive || gen !== decodeGen) return bmp.close();
-        bitmaps.set(i, bmp);
-        dirty = true;
-      } catch { /* skip */ } finally { if (gen === decodeGen) decoding.delete(i); }
-    };
-    // Decode the frames next to the playhead (mostly ahead of it), free the rest.
-    let lastDir = 1;
-    const schedule = (center: number) => {
-      const lo = center - (lastDir > 0 ? KEEP_BEHIND * 2 : KEEP_AHEAD * 1.5);
-      const hi = center + (lastDir > 0 ? KEEP_AHEAD * 1.5 : KEEP_BEHIND * 2);
-      for (const [i, b] of bitmaps) {
-        if (i < lo || i > hi) { b.close(); bitmaps.delete(i); }
-      }
-      const want: number[] = [center];
-      for (let d = 1; d <= KEEP_AHEAD; d++) {
-        const a = center + d * lastDir, b = center - d * lastDir;
-        if (a >= 1 && a <= FRAMES) want.push(a);
-        if (d <= KEEP_BEHIND && b >= 1 && b <= FRAMES) want.push(b);
-      }
-      for (const i of want) {
-        if (decoding.size >= MAX_DECODES) break;
-        if (blobs[i] && !bitmaps.has(i)) decode(i);
-      }
-    };
-
-    // Download in playing order (1 → last) so auto-play can follow right behind. Max 6 in flight.
-    let next = 1;
-    const fetchOne = async (i: number) => {
-      for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-          const res = await fetch(frameSrc(dir, i));
-          if (!res.ok) throw new Error(String(res.status));
-          const blob = await res.blob();
-          if (!alive) return;
-          blobs[i] = blob;
-          return;
-        } catch { /* retry once */ }
-      }
-    };
-    const pump = async () => { while (alive && next <= FRAMES) await fetchOne(next++); };
-    for (let k = 0; k < 6; k++) pump();
-
-    import("lenis").then(({ default: Lenis }) => {
-      if (alive) lenis = new Lenis({ prevent: (node: HTMLElement) => !!node.closest?.("[data-lenis-prevent]"), lerp: 0.1, smoothWheel: true, syncTouch: false, autoRaf: false }) as never;
-    });
-    window.addEventListener("resize", sizeCanvas);
-
-    const tick = (t: number) => {
-      lenis?.raf(t);
-      const el = sectionRef.current;
-      if (el) {
-        const total = el.offsetHeight - window.innerHeight;
-
-        // ---- auto-play ----
-        if (auto === "idle" && lenis && t - startedAt > AUTOPLAY_DELAY_MS && loadedUpTo() >= 8) {
-          if (lenis.scroll > 10) stopAuto();
-          else { auto = "playing"; autoY = lenis.scroll; autoStart = lastT = t; setAutoplaying(true); }
-        }
-        if (auto === "playing" && lenis) {
-          const start = el.offsetTop, end = start + total;
-          // Overshoot past the last frame so the next section peeks in (a cue that the page continues).
-          // Measured close to the end so fonts and layout are settled.
-          if (peek < 0 || (!peekFinal && autoY > end - total * 0.15)) {
-            peek = peekPx(el);
-            if (autoY > end - total * 0.15) peekFinal = true;
-          }
-          const finalY = end + peek;
-          const dt = Math.min(0.05, (t - lastT) / 1000);
-          lastT = t;
-          const r = Math.min(1, (t - autoStart) / 1000 / RAMP_SECONDS);
-          const rampIn = r * r * (3 - 2 * r);
-          const slowOut = Math.min(1, Math.max(0.12, (finalY - autoY) / (total * 0.08)));
-          const upTo = loadedUpTo(); // wait for frames; once all are in, allow the peek overshoot
-          const limitY = upTo >= FRAMES ? finalY : start + ((upTo - 1) / (FRAMES - 1)) * total;
-          // On a slow connection, glide down gently as we near the last downloaded frame
-          // (and back up when more arrive) instead of stopping and starting with a jolt.
-          const bufferFactor = upTo >= FRAMES ? 1 : Math.max(0, Math.min(1, (limitY - autoY) / (total * 0.1)));
-          const target = (total / AUTOPLAY_SECONDS[dir]) * rampIn * slowOut * bufferFactor;
-          speed += (target - speed) * Math.min(1, dt * 4);
-          let ny = autoY + speed * dt;
-          ny = Math.min(ny, Math.max(autoY, limitY), finalY);
-          autoY = ny;
-          lenis.scrollTo(autoY, { immediate: true, force: true });
-          if (autoY >= finalY - 0.5) stopAuto();
-        }
-
-        const y = lenis ? lenis.scroll : window.scrollY;
-        const p = Math.max(0, Math.min(1, (y - el.offsetTop) / (total || 1)));
-        // Ease the playhead (a fractional frame position) towards the scroll position.
-        const target = p * (FRAMES - 1);
-        const fdt = lastTick ? Math.min(0.1, (t - lastTick) / 1000) : 0;
-        lastTick = t;
-        if (target !== playhead) lastDir = target > playhead ? 1 : -1;
-        playhead += (target - playhead) * (1 - Math.exp(-fdt * FOLLOW_RATE));
-        if (Math.abs(target - playhead) < 0.002) playhead = target;
-        const base = Math.floor(playhead);
-        const frac = playhead - base;
-        const frame = base + 1; // 1-based file number under the playhead
-        schedule(frame);
-        if (Math.abs(playhead - drawnAt) > 0.001 || dirty) {
-          const a = bitmaps.get(frame), b = bitmaps.get(frame + 1);
-          if (a) {
-            paint(a);
-            if (b && frac > 0.01) paint(b, frac); // cross-fade into the next frame
-            drawnAt = playhead; dirty = false;
-          } else {
-            const f = nearest(Math.round(playhead) + 1);
-            if (f > 0) { paint(bitmaps.get(f)!); dirty = false; }
-          }
-        }
-        // Position on the 1–200 story scale for chapters, brightness and clouds.
-        const pos = playhead / (FRAMES - 1);
-        const storyFrame = Math.round(pos * (STORY - 1)) + 1;
-        if (progressRef.current) progressRef.current.style.transform = `scaleX(${pos})`;
-        const ch = CHAPTERS.findIndex((c) => inRange(storyFrame, c.range));
-        if (ch !== lastChapter) { lastChapter = ch; setChapter(ch); }
-        const bright = BRIGHT.some((r) => inRange(storyFrame, r));
-        if (bright !== lastBright) {
-          lastBright = bright;
-          if (brightRef.current) brightRef.current.style.opacity = bright ? "0.2" : "0";
-        }
-        if (hintRef.current) hintRef.current.style.opacity = storyFrame <= 20 || auto === "playing" ? "1" : "0";
-        const cloud = Math.round(Math.max(0, 1 - (storyFrame - 1) / CLOUD_FADE_FRAMES) * 100) / 100;
-        if (cloud !== lastCloud && cloudsRef.current) {
-          lastCloud = cloud;
-          cloudsRef.current.style.opacity = String(cloud);
-          cloudsRef.current.style.visibility = cloud > 0 ? "visible" : "hidden";
-        }
-      }
+    const v = videoRef.current;
+    if (!v || !dir) return;
+    let raf = 0, lastChapter = -1, lastBright = false, lastCloud = -1;
+    const tick = () => {
+      const dur = v.duration || 0;
+      const pos = dur ? Math.min(1, v.currentTime / dur) : 0;
+      const story = Math.round(pos * (STORY - 1)) + 1;
+      const ch = Math.max(0, CHAPTERS.findIndex((c) => inRange(story, c.range)));
+      if (ch !== lastChapter) { lastChapter = ch; setChapter(ch); }
+      const bright = BRIGHT.some((r) => inRange(story, r));
+      if (bright !== lastBright) { lastBright = bright; if (brightRef.current) brightRef.current.style.opacity = bright ? "0.2" : "0"; }
+      const cloud = Math.round(Math.max(0, 1 - (story - 1) / CLOUD_FADE_FRAMES) * 100) / 100;
+      if (cloud !== lastCloud && cloudsRef.current) { lastCloud = cloud; cloudsRef.current.style.opacity = String(cloud); cloudsRef.current.style.visibility = cloud > 0 ? "visible" : "hidden"; }
+      if (progressRef.current) progressRef.current.style.transform = `scaleX(${pos})`;
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    return () => {
-      alive = false; cancelAnimationFrame(raf); lenis?.destroy();
-      removeStopListeners();
-      window.removeEventListener("resize", sizeCanvas);
-      bitmaps.forEach((b) => b.close());
-      bitmaps.clear();
-    };
-  }, []);
+    // Pause while the hero is off screen (saves battery); resume when it comes back.
+    const io = new IntersectionObserver(([e]) => { if (e?.isIntersecting) v.play().catch(() => {}); else v.pause(); }, { threshold: 0.05 });
+    io.observe(v);
+    v.play().catch(() => {});
+    return () => { cancelAnimationFrame(raf); io.disconnect(); };
+  }, [dir]);
 
+  const media = HERO_VIDEO[dir ?? "d"];
   return (
-    <section id="hero" ref={sectionRef} className="relative h-[440vh] bg-navy-deep md:h-[480vh]">
-      <div className="sticky top-0 h-[100svh] w-full overflow-hidden text-white">
-        <canvas ref={canvasRef} aria-hidden className="absolute inset-0 block h-full w-full" style={{ contain: "strict" }} />
-
-        {/* Drifting clouds over the opening frames (fade out as the film starts) */}
-        <div ref={cloudsRef} aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="cloud-layer cloud-far" style={{ backgroundImage: "url(/hero-natec/clouds-far.webp)" }} />
-          <div className="cloud-layer cloud-near" style={{ backgroundImage: "url(/hero-natec/clouds-near.webp)" }} />
-        </div>
-
-        {/* Mobile gradients */}
-        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[120px] md:hidden" style={{ background: "linear-gradient(to bottom, rgba(4,26,56,0.45), transparent)" }} />
-        <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-[55%] md:hidden" style={{ background: M_BOTTOM }} />
-        {/* Desktop scrims */}
-        <div aria-hidden className="pointer-events-none absolute inset-0 hidden md:block" style={{ background: SCRIM }} />
-        <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 hidden h-[30%] md:block" style={{ background: "linear-gradient(to bottom, transparent, rgba(4,26,56,0.45))" }} />
-        {/* Extra scrim on bright frames (+20%) */}
-        <div ref={brightRef} aria-hidden className="pointer-events-none absolute inset-0 transition-opacity duration-500" style={{ background: "rgba(4,26,56,1)", opacity: 0 }} />
-
-        {/* Progress */}
-        <div className="absolute inset-x-0 bottom-0 h-[3px] bg-white/10" style={{ marginBottom: "env(safe-area-inset-bottom)" }}>
-          <div ref={progressRef} className="absolute inset-0 origin-left bg-brand-red" style={{ transform: "scaleX(0)" }} />
-        </div>
-
-        {CHAPTERS.map((c, i) => (
-          <div
-            key={i}
-            data-on={i === chapter ? "" : undefined}
-            aria-hidden={i !== chapter}
-            className="chapter absolute bottom-[calc(96px+env(safe-area-inset-bottom))] left-5 right-5 md:bottom-[12vh] md:left-[6vw] md:right-auto md:max-w-[620px]"
-          >
-            <ChapterBody c={c} first={i === 0} />
-          </div>
-        ))}
-
-        <div
-          ref={hintRef}
-          className={`absolute left-1/2 -translate-x-1/2 flex-col items-center gap-2 transition-opacity duration-500 ${
-            autoplaying ? "flex bottom-[calc(20px+env(safe-area-inset-bottom))]" : "hidden bottom-5 md:flex"
-          }`}
+    <section id="hero" className="relative h-[100svh] min-h-[560px] overflow-hidden bg-navy-deep text-white">
+      {dir && (
+        <video
+          key={dir}
+          ref={videoRef}
+          className="absolute inset-0 h-full w-full object-cover"
+          poster={media.poster}
+          autoPlay muted loop playsInline preload="auto"
+          disablePictureInPicture
+          aria-hidden
         >
-          <span className="eyebrow whitespace-nowrap !text-[10px] text-white/80">
-            {autoplaying ? "Scroll or tap to take control" : "Scroll to explore"}
-          </span>
-          {!autoplaying && <span className="block h-10 w-px overflow-hidden bg-white/20"><span className="scroll-hint-line block h-full w-full bg-white" /></span>}
+          <source src={media.webm} type='video/webm; codecs="vp9"' />
+          <source src={media.mp4} type="video/mp4" />
+        </video>
+      )}
+      {!dir && <img src={HERO_VIDEO.d.poster} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover" />}
+
+      {/* Drifting clouds over the opening seconds (fade out as the film starts) */}
+      <div ref={cloudsRef} aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="cloud-layer cloud-far" style={{ backgroundImage: "url(/hero-natec/clouds-far.webp)" }} />
+        <div className="cloud-layer cloud-near" style={{ backgroundImage: "url(/hero-natec/clouds-near.webp)" }} />
+      </div>
+
+      {/* Mobile gradients */}
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[120px] md:hidden" style={{ background: "linear-gradient(to bottom, rgba(4,26,56,0.45), transparent)" }} />
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-[55%] md:hidden" style={{ background: M_BOTTOM }} />
+      {/* Desktop scrims */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 hidden md:block" style={{ background: SCRIM }} />
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 hidden h-[30%] md:block" style={{ background: "linear-gradient(to bottom, transparent, rgba(4,26,56,0.45))" }} />
+      {/* Extra scrim on bright moments (+20%) */}
+      <div ref={brightRef} aria-hidden className="pointer-events-none absolute inset-0 transition-opacity duration-700" style={{ background: "rgba(4,26,56,1)", opacity: 0 }} />
+
+      {/* Film progress */}
+      <div className="absolute inset-x-0 bottom-0 h-[3px] bg-white/10" style={{ marginBottom: "env(safe-area-inset-bottom)" }}>
+        <div ref={progressRef} className="absolute inset-0 origin-left bg-brand-red" style={{ transform: "scaleX(0)" }} />
+      </div>
+
+      {CHAPTERS.map((c, i) => (
+        <div
+          key={i}
+          data-on={i === chapter ? "" : undefined}
+          aria-hidden={i !== chapter}
+          className="chapter absolute bottom-[calc(96px+env(safe-area-inset-bottom))] left-5 right-5 md:bottom-[12vh] md:left-[6vw] md:right-auto md:max-w-[620px]"
+        >
+          <ChapterBody c={c} first={i === 0} />
         </div>
+      ))}
+
+      <div className="absolute bottom-5 left-1/2 hidden -translate-x-1/2 flex-col items-center gap-2 md:flex">
+        <span className="eyebrow whitespace-nowrap !text-[10px] text-white/80">Scroll to explore</span>
+        <span className="block h-10 w-px overflow-hidden bg-white/20"><span className="scroll-hint-line block h-full w-full bg-white" /></span>
       </div>
     </section>
   );
