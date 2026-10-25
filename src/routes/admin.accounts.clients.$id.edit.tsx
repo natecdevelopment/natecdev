@@ -85,6 +85,7 @@ function ClientEditor() {
   const [saving, setSaving] = useState(false);
   const [askEmail, setAskEmail] = useState(false);
   const [delAcc, setDelAcc] = useState<DeleteTarget[] | null>(null);
+  const [mark, setMark] = useState<{ row: ScheduleRow; paid: boolean } | null>(null);
 
   // Build the form from saved data (first load, and again after each save)
   useEffect(() => {
@@ -263,13 +264,15 @@ function ClientEditor() {
 
       {tab === "Payment plan & schedule" && (
         <Card>
-          <PaymentPlanForm value={f.plan} onChange={(plan) => setF({ ...f, plan })} bookingDate={f.home.booking_date} build={(p) => rebuildKeepingPaid(p, f.home.booking_date, f.plan.rows)} />
-          <p className="mt-3 text-xs text-muted-foreground">Paid and partly-paid instalments are locked. Saving re-applies received payments to the oldest instalments first.</p>
+          <PaymentPlanForm value={f.plan} onChange={(plan) => setF({ ...f, plan })} bookingDate={f.home.booking_date} build={(p) => rebuildKeepingPaid(p, f.home.booking_date, f.plan.rows)}
+            paidToggle={{ enabled: !dirty["Payment plan & schedule"], disabledReason: "Save your schedule changes first", onToggle: (row, paid) => setMark({ row, paid }) }} />
+          <p className="mt-3 text-xs text-muted-foreground">Tick "Paid" to record a payment for a row (and any earlier unpaid rows); untick to undo a payment made this way. Paid and partly-paid instalments are locked. Payments are applied to the oldest instalments first.</p>
           {errors.plan && <p role="alert" className="mt-2 text-sm font-medium text-brand-red">{errors.plan}</p>}
         </Card>
       )}
 
       {tab === "Payments" && <Payments clientId={c.id} rows={d.payments} onChange={refresh} />}
+      {mark && <MarkPaidDialog clientId={c.id} target={mark.row} paid={mark.paid} inst={d.inst} payments={d.payments} onClose={() => setMark(null)} onDone={refresh} />}
       {tab === "Documents" && <Docs clientId={c.id} docs={d.docs} onChange={refresh} />}
       {tab === "Notes" && (
         <Card>
@@ -493,5 +496,79 @@ function Docs({ clientId, docs, onChange }: { clientId: string; docs: { id: stri
         </ul>
       )}
     </Card>
+  );
+}
+
+/** Payments made with the "Paid" tick carry this reference, so unticking can find and undo them. */
+const TICK_REF = "Marked paid";
+type InstRow = { id: string; due_date: string; amount: number | string; paid_amount: number | string; label: string };
+
+/**
+ * Tick: records one payment covering the row and any earlier unpaid rows (payments always fill the oldest rows first).
+ * Untick: reduces or removes payments made with the tick until this row (and later rows) are unpaid again.
+ */
+function MarkPaidDialog({ clientId, target, paid, inst, payments, onClose, onDone }: { clientId: string; target: ScheduleRow; paid: boolean; inst: InstRow[]; payments: PaymentRow[]; onClose: () => void; onDone: () => Promise<void> }) {
+  const [date, setDate] = useState(today());
+  const [method, setMethod] = useState<string>("Cash");
+  const [busy, setBusy] = useState(false);
+  const order = [...inst].sort((a, b) => a.due_date.localeCompare(b.due_date) || a.id.localeCompare(b.id));
+  const k = order.findIndex((r) => r.id === target.id);
+  const upTo = order.slice(0, k + 1);
+  const open = upTo.filter((r) => Number(r.paid_amount) < Number(r.amount));
+  const payAmount = open.reduce((s, r) => s + Number(r.amount) - Number(r.paid_amount), 0);
+  const before = order.slice(0, k).reduce((s, r) => s + Number(r.amount), 0);
+  const totalPaid = payments.reduce((s, p) => s + Number(p.amount), 0);
+  const excess = Math.max(0, totalPaid - before);
+  const ticks = payments.filter((p) => p.reference === TICK_REF).sort((a, b) => b.paid_on.localeCompare(a.paid_on) || b.created_at.localeCompare(a.created_at));
+  const tickTotal = ticks.reduce((s, p) => s + Number(p.amount), 0);
+  const canUndo = tickTotal >= excess;
+  const typeOf = (l: string) => ((PAYMENT_TYPES as readonly string[]).includes(l) ? l : "Instalment");
+
+  async function go() {
+    setBusy(true);
+    try {
+      if (paid) {
+        const r = await supabase.from("payments").insert({ client_id: clientId, paid_on: date, amount: payAmount, type: typeOf(target.label), method, reference: TICK_REF, note: `Marked as paid: ${open.map((x) => x.label).join(", ")}` });
+        if (r.error) throw r.error;
+      } else {
+        let left = excess;
+        for (const p of ticks) {
+          if (left <= 0) break;
+          const amt = Number(p.amount);
+          const r = amt <= left ? await supabase.from("payments").delete().eq("id", p.id) : await supabase.from("payments").update({ amount: amt - left }).eq("id", p.id);
+          if (r.error) throw r.error;
+          left -= Math.min(amt, left);
+        }
+      }
+      const re = await supabase.rpc("admin_reallocate_payments", { _client_id: clientId });
+      if (re.error) throw re.error;
+      toast.success(paid ? `Recorded ${taka(payAmount)} — ${target.label} marked paid` : `${target.label} marked as not paid`);
+      await onDone(); onClose();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Could not update."); } finally { setBusy(false); }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>{paid ? `Mark "${target.label}" as paid?` : `Mark "${target.label}" as not paid?`}</DialogTitle></DialogHeader>
+        {paid ? (
+          <div className="space-y-3 text-sm">
+            <p className="text-muted-foreground">A payment of <b className="text-navy">{taka(payAmount)}</b> will be recorded{open.length > 1 ? <> for {open.map((x) => x.label).join(", ")} (earlier unpaid rows are paid first)</> : null}.</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="font-medium text-navy">Paid on<input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="admin-input mt-1" /></label>
+              <label className="font-medium text-navy">Method<select value={method} onChange={(e) => setMethod(e.target.value)} className="admin-input mt-1">{PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}</select></label>
+            </div>
+          </div>
+        ) : canUndo ? (
+          <p className="text-sm text-muted-foreground">{taka(excess)} of the payments made with the "Paid" tick will be removed, so this row{order.length - 1 > k ? " and the rows after it" : ""} become unpaid.</p>
+        ) : (
+          <p className="text-sm text-brand-red">This row is paid by payments recorded in Payment history ({taka(excess - tickTotal)} more than the "Paid" ticks). Edit or delete those payments in the Payments tab instead.</p>
+        )}
+        <div className="mt-4 flex justify-end gap-2">
+          <button onClick={onClose} className={btnSm}>Cancel</button>
+          {(paid ? payAmount > 0 && !!date : canUndo && excess > 0) && <button disabled={busy} onClick={go} className="btn btn-primary !py-2 disabled:opacity-50">{busy ? "Saving…" : paid ? "Record payment" : "Mark not paid"}</button>}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

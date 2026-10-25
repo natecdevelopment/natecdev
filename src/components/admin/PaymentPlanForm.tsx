@@ -31,7 +31,10 @@ const FREQ: [PlanForm["freqMonths"], string][] = [[1, "Monthly"], [2, "Every 2 m
 const ROUND: [PlanForm["round"], string][] = [[0, "None"], [100, "৳100"], [500, "৳500"], [1000, "৳1,000"]];
 
 /** `build` overrides how the schedule is generated (client editor: keep paid rows). Rows with paid > 0 are locked. */
-export function PaymentPlanForm({ value, onChange, bookingDate, build }: { value: PlanState; onChange: (s: PlanState) => void; bookingDate: string; build?: (p: PlanForm) => ScheduleRow[] }) {
+/** `paidToggle` (client editor only) adds a "Paid" tick to every saved row. */
+export type PaidToggle = { enabled: boolean; disabledReason?: string; onToggle: (row: ScheduleRow, paid: boolean) => void };
+
+export function PaymentPlanForm({ value, onChange, bookingDate, build, paidToggle }: { value: PlanState; onChange: (s: PlanState) => void; bookingDate: string; build?: (p: PlanForm) => ScheduleRow[]; paidToggle?: PaidToggle }) {
   const { plan, rows, dirty } = value;
   const gen = (p: PlanForm) => (build ? build(p) : computePlan(p, bookingDate).rows);
   const calc = useMemo(() => computePlan(plan, bookingDate), [plan, bookingDate]);
@@ -114,7 +117,7 @@ export function PaymentPlanForm({ value, onChange, bookingDate, build }: { value
               {rows.map((r, i) => ({ r, i })).sort((a, b) => Number(!isExtra(a.r.label)) - Number(!isExtra(b.r.label))).map(({ r, i }) => {
                 const paid = r.paid ?? 0, lock = paid > 0;
                 return (
-                <li key={r.id ?? `n${i}`} className={`grid grid-cols-[1fr_auto] gap-2 rounded-lg border border-border p-2 sm:grid-cols-[150px_1fr_140px_auto] sm:border-0 sm:p-0 ${lock ? "sm:bg-ivory/60" : ""}`}>
+                <li key={r.id ?? `n${i}`} className={`grid grid-cols-[1fr_auto] gap-2 rounded-lg border border-border p-2 sm:border-0 sm:p-0 ${paidToggle ? "sm:grid-cols-[150px_1fr_140px_auto_auto]" : "sm:grid-cols-[150px_1fr_140px_auto]"} ${lock ? "sm:bg-ivory/60" : ""}`}>
                   {isExtra(r.label)
                     ? <span className="col-span-2 flex items-center px-3 text-sm text-muted-foreground sm:col-span-1">Up front · no date</span>
                     : <input type="date" value={r.due_date} disabled={lock} aria-label={`${r.label} due date`} onChange={(ev) => setRow(i, { due_date: ev.target.value })} className="admin-input col-span-2 disabled:opacity-70 sm:col-span-1" />}
@@ -123,6 +126,16 @@ export function PaymentPlanForm({ value, onChange, bookingDate, build }: { value
                     <input inputMode="numeric" value={String(r.amount)} aria-label={`${r.label} amount`} aria-invalid={r.amount < paid} onChange={(ev) => setRow(i, { amount: num(ev.target.value) })} className="admin-input" />
                     {lock && <p className={`mt-0.5 text-[11px] ${r.amount < paid ? "font-medium text-brand-red" : "text-muted-foreground"}`}>{r.amount < paid ? `Cannot be below ${taka(paid)} paid` : `${taka(paid)} paid`}</p>}
                   </div>
+                  {paidToggle && (() => {
+                    const full = r.amount > 0 && paid >= r.amount, part = paid > 0 && !full;
+                    const can = paidToggle.enabled && !!r.id && r.amount > 0;
+                    return (
+                      <label title={can ? (full ? "Mark as not paid" : "Mark as paid") : (paidToggle.disabledReason ?? "Save the schedule first")} className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium ${full ? "border-green-700/30 bg-green-50 text-green-800" : part ? "border-brand-red/30 text-brand-red" : "border-navy/20 text-navy"} ${can ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}>
+                        <input type="checkbox" className="h-4 w-4 accent-green-700" checked={full} disabled={!can} onChange={(ev) => paidToggle.onToggle(r, ev.target.checked)} aria-label={`${r.label} paid`} />
+                        {full ? "Paid" : part ? "Part" : "Paid"}
+                      </label>
+                    );
+                  })()}
                   {lock
                     ? <span title="Paid — locked" className="inline-flex h-9 w-9 items-center justify-center text-navy"><Lock className="h-4 w-4" aria-label="Paid — locked" /></span>
                     : <button type="button" onClick={() => onChange({ ...value, rows: rows.filter((_, j) => j !== i), dirty: true })} className={btnDanger} aria-label={`Remove ${r.label}`}><Trash2 className="h-4 w-4" /></button>}
